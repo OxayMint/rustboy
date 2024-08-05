@@ -31,7 +31,7 @@ impl SetBytes for u16 {
     }
 
     fn separate_bytes(&mut self) -> (u8, u8) {
-        return ((*self & 0xff00) as u8, (*self >> 8) as u8);
+        return (*self as u8, (*self >> 8) as u8);
     }
     fn from_pair(low: u8, hi: u8) -> u16 {
         let mut res: u16 = 0;

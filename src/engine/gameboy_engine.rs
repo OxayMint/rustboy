@@ -7,7 +7,7 @@ use crate::libs::timer::Timer;
 
 use super::SetBytes;
 
-extern crate sdl2;
+// extern crate sdl2;
 
 /*
   Emulator components:
@@ -47,9 +47,9 @@ impl GameBoyEngine {
     }
 
     pub fn start(&mut self) {
-        // let mut n = 0;
-        while self.running {
-            print!("{:#04x} ", self.cpu.regs.pc);
+        let mut n = 0;
+        while self.running && n < 0x30 {
+            print!("*               {:#04x} ", self.cpu.regs.pc);
             if !self.cpu_step() {
                 self.running = false;
             }
@@ -63,23 +63,32 @@ impl GameBoyEngine {
         let second_byte = self.memory.read((self.cpu.regs.pc + 2) as usize);
         let inst = Instruction::from_opcode(&opcode);
         println!(
-            "{} ({:02X} {:02X} {:02X}) A:{:02X}, BC:{:02X}{:02X}, DE:{:02X}{:02X}, HL:{:02X}{:02X}",
+            "{} ({:02X} {:02X} {:02X}) A:{:02X} F:{}, BC:{:02X}{:02X}, DE:{:02X}{:02X}, HL:{:02X}{:02X}, SP:{:05}, Stack Last: {:#06X},{:#06X},{:#06X},{:#06X},{:#06X}",
             inst.to_string(),
             opcode,
             following_byte,
             second_byte,
             self.cpu.regs.a,
+            // self.cpu.regs.f,
+            self.cpu.regs.get_flags_mnemonic(),
             self.cpu.regs.b,
             self.cpu.regs.c,
             self.cpu.regs.d,
             self.cpu.regs.e,
             self.cpu.regs.h,
             self.cpu.regs.l,
+            (57343 - self.cpu.regs.sp) / 2,
+             self.memory.read16(self.cpu.regs.sp as usize),
+            self.memory.read16((self.cpu.regs.sp + 2) as usize),
+            self.memory.read16((self.cpu.regs.sp + 4) as usize),
+            self.memory.read16((self.cpu.regs.sp + 6) as usize),
+            self.memory.read16((self.cpu.regs.sp + 8) as usize)
         );
         self.cpu.current_instruction = inst;
         self.cpu.destination_is_mem = false;
         self.cpu.increment_pointer(1);
         self.fetch_data();
+
         self.cpu.execute(&mut self.memory);
 
         return true;
@@ -88,9 +97,7 @@ impl GameBoyEngine {
     pub fn fetch_data(&mut self) {
         let pc = self.cpu.regs.pc as usize;
         self.cpu.fetched_data = match self.cpu.current_instruction.address_mode {
-            // Instruction::AddressMode::IMPLIED => {}
-            AddressMode::IMPLIED => 0,
-            AddressMode::R => self
+            AddressMode::IMPLIED | AddressMode::R => self
                 .cpu
                 .get_register_value(&self.cpu.current_instruction.register_1),
 
@@ -121,6 +128,7 @@ impl GameBoyEngine {
                 let result: u16 = self.memory.read16(self.cpu.regs.pc as usize);
                 // result.set_low(self.memory.read(pc));
                 // result.set_high(self.memory.read(pc + 1));
+                self.cpu.emu_cycles(2);
                 self.cpu.increment_pointer(2);
                 result
             }

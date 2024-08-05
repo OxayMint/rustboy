@@ -171,10 +171,13 @@ impl Memory {
         val
     }
     pub fn stack_push16(&mut self, sp: &mut u16, value: u16) {
+        // println!("pushed {:#X}", value);
         self.stack_push(sp, (value >> 8) as u8);
         self.stack_push(sp, value as u8);
     }
     pub fn stack_pop16(&mut self, sp: &mut u16) -> u16 {
-        u16::from_pair(self.stack_pop(sp), self.stack_pop(sp))
+        let val = u16::from_pair(self.stack_pop(sp), self.stack_pop(sp));
+        // println!("popped {:#X}", val);
+        val
     }
 }

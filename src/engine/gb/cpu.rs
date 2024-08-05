@@ -25,8 +25,14 @@ impl Registers {
             h: 0,
             l: 0,
             pc: 0x100,
-            sp: 0,
+            sp: 0xE000 - 1,
         }
+    }
+    pub fn get_flags_mnemonic(&self) -> String {
+        let z = if self.f & 0b01000000 > 0 { "Z" } else { "-" };
+        let n = if self.f & 0b00100000 > 0 { "N" } else { "-" };
+        let c = if self.f & 0b00010000 > 0 { "C" } else { "-" };
+        return format!("{z}{n}{c}");
     }
 }
 
@@ -67,7 +73,7 @@ impl CPU {
                         self.emu_cycles(1);
                         memory.write16(self.mem_dest as usize, self.fetched_data);
                     } else {
-                        memory.write(self.mem_dest as usize, self.fetched_data.separate_bytes().0);
+                        memory.write(self.mem_dest as usize, self.fetched_data as u8);
                     }
                     return;
                 }
@@ -85,17 +91,10 @@ impl CPU {
                     );
                     return;
                 }
-                // println!(
-                //     "LD to Flag {} value {:#x}",
-                //     instruction::Instruction::register_mnemonic(
-                //         &self.current_instruction.register_1
-                //     ),
-                //     self.fetched_data
-                // );
                 self.set_register_value(
                     self.current_instruction.register_1.clone(),
                     self.fetched_data,
-                );
+                )
             }
             InstructionType::INC => {
                 let new_val = self.fetched_data + 1;
@@ -125,7 +124,7 @@ impl CPU {
                 // H Set if overflow from bit 3.
             }
             InstructionType::DEC => {
-                let new_val = self.fetched_data - 1;
+                let new_val = self.fetched_data.wrapping_sub(1);
                 if self.current_instruction.register_1 == RegisterType::SP {
                     self.regs.sp = new_val
                 } else {
@@ -148,7 +147,37 @@ impl CPU {
                 }
             }
             InstructionType::RLCA => todo!(),
-            InstructionType::ADD => todo!(),
+            InstructionType::ADD => {
+                let reg_val: u32 =
+                    self.get_register_value(&self.current_instruction.register_1) as u32;
+                let mut val: u32 = reg_val + self.fetched_data as u32;
+                let is_16_bit = self.current_instruction.register_1 >= RegisterType::AF;
+                if is_16_bit {
+                    self.emu_cycles(1);
+                }
+                if self.current_instruction.register_1 == RegisterType::SP {
+                    val = (reg_val as i16 + self.fetched_data as i16) as u32;
+                }
+                let mut z: i8 = ((val & 0xff) == 0) as i8;
+                let mut h: i8 = ((reg_val & 0xf) + (self.fetched_data & 0xf) as u32 >= 0x10) as i8;
+                let mut c: i8 = (reg_val & 0xff) as i8 + (self.fetched_data & 0xff) as i8;
+                if is_16_bit {
+                    z = -1;
+                    h = ((reg_val & 0xfff) + (self.fetched_data & 0xfff) as u32 >= 0x1000) as i8;
+                    c = (val >= 0x10000) as i8;
+                }
+                if self.current_instruction.register_1 == RegisterType::SP {
+                    z = 0;
+                    h = ((reg_val & 0xf) as i8 + (self.fetched_data & 0xf) as i8 >= 0x10) as i8;
+                    c = ((reg_val & 0xff) as i16 + (self.fetched_data & 0xff) as i16 >= 0x100)
+                        as i8;
+                }
+                self.set_register_value(
+                    self.current_instruction.register_1.clone(),
+                    val as u16 & 0xFFFF,
+                );
+                self.set_flags(z, 0, h, c);
+            }
             InstructionType::RRCA => todo!(),
             InstructionType::STOP => todo!(),
             InstructionType::RLA => todo!(),
@@ -160,6 +189,56 @@ impl CPU {
             InstructionType::RRA => todo!(),
             InstructionType::DAA => todo!(),
             InstructionType::CPL => {
+                self.regs.a = !self.regs.a;
+                self.set_flags(-1, 1, 1, -1)
+            }
+            InstructionType::SCF => todo!(),
+            InstructionType::CCF => todo!(),
+            InstructionType::HALT => todo!(),
+            InstructionType::ADC => {
+                let d = self.fetched_data;
+                let a = self.regs.a as u16;
+                let c = self.flag_c() as u16;
+
+                self.regs.a = ((d + a + c) & 0xff) as u8;
+
+                self.set_flags(
+                    (self.regs.a == 0) as i8,
+                    0,
+                    ((a & 0xf + d & 0xf + c) > 0xf) as i8,
+                    (a + d + c > 0xff) as i8,
+                )
+            }
+            InstructionType::SUB => {
+                let val = self.regs.a - self.fetched_data as u8;
+
+                let z = (val == 0) as i8;
+                let h = ((self.regs.a as i8 & 0xF) - (self.fetched_data as i8 & 0xf) > 0) as i8;
+                let c = (self.regs.a < self.fetched_data as u8) as i8;
+                self.regs.a = val;
+                self.set_flags(z, 1, h, c)
+            }
+            InstructionType::SBC => {
+                let carry = if self.flag_c() { 1 } else { 0 };
+                let a = self.regs.a;
+                let val = (self.fetched_data as u8).wrapping_add(carry);
+                let result = a.wrapping_sub(val);
+                let h = (a & 0xF) < (val & 0xF);
+                let c = a < val;
+                self.regs.a = result;
+                self.set_flags((result == 0) as i8, 1, h as i8, c as i8);
+            }
+            InstructionType::AND => {
+                self.set_flags((self.regs.a as u16 & self.fetched_data == 0) as i8, 0, 1, 0)
+            }
+            InstructionType::XOR => {
+                self.set_flags((self.regs.a as u16 ^ self.fetched_data == 0) as i8, 0, 0, 0)
+            }
+            InstructionType::OR => {
+                self.regs.a |= self.fetched_data as u8;
+                self.set_flags((self.regs.a == 0) as i8, 0, 0, 0)
+            }
+            InstructionType::CP => {
                 let a = self.regs.a as u16;
                 let c = self.fetched_data;
                 self.set_flags(
@@ -169,26 +248,15 @@ impl CPU {
                     (a > c) as i8,
                 );
             }
-            InstructionType::SCF => todo!(),
-            InstructionType::CCF => todo!(),
-            InstructionType::HALT => todo!(),
-            InstructionType::ADC => todo!(),
-            InstructionType::SUB => todo!(),
-            InstructionType::SBC => todo!(),
-            InstructionType::AND => todo!(),
-            InstructionType::XOR => {
-                self.regs.a = self.regs.a ^ (self.fetched_data as u8 & 0xff);
-                self.set_flags((self.regs.a == 1) as i8, 0, 0, 0);
-            }
-            InstructionType::OR => todo!(),
-            InstructionType::CP => todo!(),
             InstructionType::POP => {
                 let val = memory.stack_pop16(&mut self.regs.sp);
                 self.emu_cycles(2);
                 if self.current_instruction.register_1 == RegisterType::AF {
                     self.set_register_value(RegisterType::AF, val & 0xFFF0);
                 } else {
-                    self.set_register_value(self.current_instruction.register_1.clone(), val);
+                    let reg = self.current_instruction.register_1.clone();
+
+                    self.set_register_value(reg, val);
                 }
             }
             InstructionType::JP => self.goto_addr(self.fetched_data, memory, false),
@@ -197,8 +265,9 @@ impl CPU {
                 self.emu_cycles(2);
             }
             InstructionType::RET => {
-                if self.current_instruction.condition != ConditionType::NONE {
+                if self.check_condition() {
                     let addr = memory.stack_pop16(&mut self.regs.sp);
+                    // println!("returnning to {:#X}", addr);
                     self.regs.pc = addr;
                     self.emu_cycles(3)
                 }
@@ -217,10 +286,6 @@ impl CPU {
                 self.mem_dest = self.mem_dest.wrapping_add(0xFF00);
                 //Load value in register A from the byte at address n16, provided the address is between $FF00 and $FFFF.
                 if self.destination_is_mem {
-                    println!(
-                        "writing to address {:#x} value {:#x}",
-                        self.mem_dest, self.fetched_data
-                    );
                     memory.write(self.mem_dest, self.fetched_data as u8);
                     self.emu_cycles(1);
                 } else {
@@ -298,6 +363,18 @@ impl CPU {
             };
         }
     }
+    fn flag_z(&self) -> bool {
+        self.regs.f << 7 > 0
+    }
+    fn flag_n(&self) -> bool {
+        self.regs.f << 6 > 0
+    }
+    fn flag_h(&self) -> bool {
+        self.regs.f << 5 > 0
+    }
+    fn flag_c(&self) -> bool {
+        self.regs.f << 4 > 0
+    }
     pub fn get_register_value(&self, register: &RegisterType) -> u16 {
         match register {
             RegisterType::A => self.regs.a as u16,
@@ -349,6 +426,7 @@ impl CPU {
             _ => {}
         }
     }
+
     fn check_condition(&self) -> bool {
         let z: bool = (self.regs.f & 0b01000000) != 0;
         let c: bool = (self.regs.f & 0b00001000) != 0;
@@ -362,6 +440,14 @@ impl CPU {
     }
     fn goto_addr(&mut self, addr: u16, memory: &mut Memory, push_pc: bool) {
         if self.check_condition() {
+            // println!(
+            //     "Going from {:#X} to {:#X}. reg_1: {}, reg_val: {} pushing pc: {}",
+            //     self.regs.pc,
+            //     addr,
+            //     Instruction::register_mnemonic(&self.current_instruction.register_1),
+            //     self.get_register_value(&self.current_instruction.register_1),
+            //     push_pc
+            // );
             if push_pc {
                 memory.stack_push16(&mut self.regs.sp, self.regs.pc);
                 self.emu_cycles(2);
