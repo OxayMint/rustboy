@@ -1,0 +1,9 @@
+[package]
+name = "rustboy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+byteorder = "1.4"
+phf = { version = "0.11.2", features = ["macros"] }
+sdl2 = "0.37.0"
