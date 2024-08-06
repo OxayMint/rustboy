@@ -66,7 +66,9 @@ impl Memory {
             }
             0xFF00..0xFF80 => {
                 //IO data
-                self.ioram_read(address - 0xFF00)
+                todo!("IO not implemented yet");
+
+                // self.ioram_read(address - 0xFF00)
             }
             0xFF80..0xFFFF => {
                 //high ram/zero page
@@ -110,7 +112,9 @@ impl Memory {
             }
             0xFF00..0xFF80 => {
                 //IO data
-                self.ioram_write(address - 0xFF00, value);
+                // todo!("{address:#4X} - IO not implemented yet");
+
+                // self.ioram_write(address - 0xFF00, value);
             }
             0xFF80..0xFFFF => {
                 //high ram/zero page

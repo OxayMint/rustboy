@@ -1,6 +1,11 @@
+use std::process::exit;
+
 use crate::libs::instruction::{self, *};
 
-use super::{memory::Memory, SetBytes};
+use super::{
+    memory::{self, Memory},
+    SetBytes,
+};
 pub struct CPU {
     pub regs: Registers,
     pub fetched_data: u16,
@@ -16,7 +21,7 @@ pub struct CPU {
 impl Registers {
     pub fn new() -> Self {
         Registers {
-            a: 0,
+            a: 1,
             b: 0,
             c: 0,
             d: 0,
@@ -25,20 +30,22 @@ impl Registers {
             h: 0,
             l: 0,
             pc: 0x100,
-            sp: 0xE000 - 1,
+            sp: 0xDFFF,
         }
     }
     pub fn get_flags_mnemonic(&self) -> String {
-        let z = if self.f & 0b01000000 > 0 { "Z" } else { "-" };
-        let n = if self.f & 0b00100000 > 0 { "N" } else { "-" };
+        let z = if self.f & 0b10000000 > 0 { "Z" } else { "-" };
+        let n = if self.f & 0b01000000 > 0 { "N" } else { "-" };
+        let h = if self.f & 0b00100000 > 0 { "H" } else { "-" };
         let c = if self.f & 0b00010000 > 0 { "C" } else { "-" };
-        return format!("{z}{n}{c}");
+        return format!("{z}{n}{h}{c}");
     }
 }
 
 impl CPU {
     pub fn new() -> Self {
         // Instruction::start_opcodetests();
+
         CPU {
             regs: Registers::new(),
             fetched_data: 0,
@@ -97,7 +104,7 @@ impl CPU {
                 )
             }
             InstructionType::INC => {
-                let new_val = self.fetched_data + 1;
+                let new_val = self.fetched_data.wrapping_add(1);
                 if self.current_instruction.register_1 == RegisterType::SP {
                     self.regs.sp = new_val
                 } else {
@@ -136,7 +143,7 @@ impl CPU {
                             new_val,
                         )
                     }
-                    if (self.current_instruction.opcode | 0x3) != 0x3 {
+                    if (self.current_instruction.opcode | 0xb) != 0xb {
                         self.set_flags(
                             (new_val == 0) as i8,
                             1,
@@ -146,7 +153,13 @@ impl CPU {
                     }
                 }
             }
-            InstructionType::RLCA => todo!(),
+            InstructionType::RLCA => {
+                let mut val: u8 = self.regs.a;
+                let c = (val >> 7) & 1; // = 1 or 0. Basically a bool thats says whether the last bit of A is 1
+                val = (val << 1) | c;
+                self.regs.a = val;
+                self.set_flags(0, 0, 0, c as i8);
+            }
             InstructionType::ADD => {
                 let reg_val: u32 =
                     self.get_register_value(&self.current_instruction.register_1) as u32;
@@ -178,23 +191,51 @@ impl CPU {
                 );
                 self.set_flags(z, 0, h, c);
             }
-            InstructionType::RRCA => todo!(),
-            InstructionType::STOP => todo!(),
-            InstructionType::RLA => todo!(),
+            InstructionType::RRCA => {
+                let mut val: u8 = self.regs.a;
+                let c = val & 1; // = 1 or 0. Basically a bool thats says whether the first bit of A is 1
+                val = (val >> 1) | (c << 7);
+                self.regs.a = val;
+                self.set_flags(0, 0, 0, c as i8);
+            }
+            InstructionType::STOP => {
+                println!("Stop executed");
+                exit(1);
+            }
+            InstructionType::RLA => {
+                let old_c = self.flag_c() as u8;
+                let new_c = self.regs.a >> 7;
+                self.regs.a = (self.regs.a << 1) | old_c;
+                self.set_flags(0, 0, 0, new_c as i8);
+            }
             InstructionType::JR => {
-                let offset = self.fetched_data as i16;
-                let new_address = (self.regs.pc as i16 + offset) as u16;
+                let offset = self.fetched_data as i8;
+                let new_address = if offset >= 0 {
+                    self.regs.pc.wrapping_add(offset as u16)
+                } else {
+                    self.regs.pc.wrapping_sub((-offset) as u16)
+                };
+
+                // println!(
+                //     "curr: {}, offset: {}, new addr: {}",
+                //     self.regs.pc, offset, new_address
+                // );
                 self.goto_addr(new_address, memory, false);
             }
-            InstructionType::RRA => todo!(),
+            InstructionType::RRA => {
+                let old_c = self.flag_c() as u8;
+                let new_c = self.regs.a & 1;
+                self.regs.a = (self.regs.a >> 1) | (old_c << 7);
+                self.set_flags(0, 0, 0, new_c as i8);
+            }
             InstructionType::DAA => todo!(),
             InstructionType::CPL => {
                 self.regs.a = !self.regs.a;
                 self.set_flags(-1, 1, 1, -1)
             }
             InstructionType::SCF => todo!(),
-            InstructionType::CCF => todo!(),
-            InstructionType::HALT => todo!(),
+            InstructionType::CCF => self.set_flags(-1, 0, 0, !self.flag_c() as i8),
+            InstructionType::HALT => self.set_flags(-1, 0, 0, 1),
             InstructionType::ADC => {
                 let d = self.fetched_data;
                 let a = self.regs.a as u16;
@@ -232,15 +273,23 @@ impl CPU {
                 self.set_flags((self.regs.a as u16 & self.fetched_data == 0) as i8, 0, 1, 0)
             }
             InstructionType::XOR => {
-                self.set_flags((self.regs.a as u16 ^ self.fetched_data == 0) as i8, 0, 0, 0)
+                self.regs.a ^= self.fetched_data as u8;
+                self.set_flags((self.regs.a == 0) as i8, 0, 0, 0)
             }
             InstructionType::OR => {
                 self.regs.a |= self.fetched_data as u8;
                 self.set_flags((self.regs.a == 0) as i8, 0, 0, 0)
             }
             InstructionType::CP => {
-                let a = self.regs.a as u16;
-                let c = self.fetched_data;
+                let a = self.regs.a as i32;
+                let c = self.fetched_data as i32;
+                let n = a.wrapping_sub(c);
+                self.set_flags(
+                    (n == 0) as i8,
+                    1,
+                    ((self.regs.a as i8 & 0x0F) - (self.fetched_data as i8 & 0x0F) < 0) as i8,
+                    (n < 0) as i8,
+                );
                 self.set_flags(
                     (a == c) as i8,
                     1,
@@ -272,7 +321,7 @@ impl CPU {
                     self.emu_cycles(3)
                 }
             }
-            InstructionType::CB => todo!(),
+            InstructionType::CB => self.run_cb(memory),
             InstructionType::CALL => self.goto_addr(self.fetched_data, memory, true),
             InstructionType::RETI => {
                 self.int_master_enabled = true;
@@ -283,14 +332,24 @@ impl CPU {
                 }
             }
             InstructionType::LDH => {
-                self.mem_dest = self.mem_dest.wrapping_add(0xFF00);
-                //Load value in register A from the byte at address n16, provided the address is between $FF00 and $FFFF.
+                // self.mem_dest = self.mem_dest.wrapping_add(0xFF00);
+                // //Load value in register A from the byte at address n16, provided the address is between $FF00 and $FFFF.
+                // if self.destination_is_mem {
+                //     memory.write(self.mem_dest, self.fetched_data as u8);
+                //     self.emu_cycles(1);
+                // } else {
+                //     self.regs.a = self.fetched_data as u8;
+                // }
+                let addr = self.mem_dest | 0xFF00;
                 if self.destination_is_mem {
-                    memory.write(self.mem_dest, self.fetched_data as u8);
-                    self.emu_cycles(1);
+                    memory.write(addr, self.fetched_data as u8);
                 } else {
-                    self.regs.a = self.fetched_data as u8;
+                    self.set_register_value(
+                        self.current_instruction.register_1.clone(),
+                        addr as u16,
+                    );
                 }
+                self.emu_cycles(1);
             }
             InstructionType::JPHL => todo!(),
             InstructionType::DI => {
@@ -324,56 +383,48 @@ impl CPU {
         self.regs.pc = self.regs.pc.wrapping_add(by);
     }
 
-    // #define BIT(a, n) ((a & (1 << n)) ? 1 : 0)
+    // BIT(a, n) ((a & (1 << n)) ? 1 : 0)
 
-    // #define BIT_SET(a, n, on) {if (on) (a) |= (1 << n); else (a) &= ~(1 << n);}
+    // BIT_SET(a, n, on) {if (on) (a) |= (1 << n); else (a) &= ~(1 << n);}
+
+    fn bit_set(a: &mut u8, n: u8, on: bool) {
+        if on {
+            *a |= 1 << n;
+        } else {
+            *a &= !(1 << n);
+        }
+    }
 
     // #define BETWEEN(a, b, c) ((a >= b) && (a <= c))
     fn set_flags(&mut self, z: i8, n: i8, h: i8, c: i8) {
         // println!("z:{} n:{} h:{} c:{}", z, n, h, c);
         if z != -1 {
-            self.regs.f = if z == 1 {
-                self.regs.f | (1 << 7)
-            } else {
-                self.regs.f & !(1 << 7)
-            };
+            CPU::bit_set(&mut self.regs.f, 7, z > 0);
         }
 
         if n != -1 {
-            self.regs.f = if n == 1 {
-                self.regs.f | (1 << 6)
-            } else {
-                self.regs.f & !(1 << 6)
-            };
+            CPU::bit_set(&mut self.regs.f, 6, n > 0);
         }
 
         if h != -1 {
-            self.regs.f = if h == 1 {
-                self.regs.f | (1 << 5)
-            } else {
-                self.regs.f & !(1 << 5)
-            };
+            CPU::bit_set(&mut self.regs.f, 5, h > 0);
         }
 
         if c != -1 {
-            self.regs.f = if c == 1 {
-                self.regs.f | (1 << 4)
-            } else {
-                self.regs.f & !(1 << 4)
-            };
+            CPU::bit_set(&mut self.regs.f, 4, c > 0);
         }
     }
     fn flag_z(&self) -> bool {
-        self.regs.f << 7 > 0
+        (self.regs.f & 0b10000000) != 0
     }
     fn flag_n(&self) -> bool {
-        self.regs.f << 6 > 0
+        (self.regs.f & 0b01000000) != 0
     }
     fn flag_h(&self) -> bool {
-        self.regs.f << 5 > 0
+        (self.regs.f & 0b00100000) != 0
     }
     fn flag_c(&self) -> bool {
-        self.regs.f << 4 > 0
+        (self.regs.f & 0b00010000) != 0
     }
     pub fn get_register_value(&self, register: &RegisterType) -> u16 {
         match register {
@@ -385,57 +436,88 @@ impl CPU {
             RegisterType::H => self.regs.h as u16,
             RegisterType::L => self.regs.l as u16,
             RegisterType::F => self.regs.f as u16,
-            RegisterType::AF => ((self.regs.a as u16) << 8) | self.regs.f as u16,
-            RegisterType::BC => ((self.regs.b as u16) << 8) | self.regs.c as u16,
-            RegisterType::DE => ((self.regs.d as u16) << 8) | self.regs.e as u16,
-            RegisterType::HL => ((self.regs.h as u16) << 8) | self.regs.l as u16,
-            RegisterType::SP => self.regs.sp.clone(),
-            RegisterType::PC => self.regs.pc.clone(),
-            RegisterType::NONE => todo!("Non existent register occured"),
+            RegisterType::AF => u16::from_be_bytes([self.regs.a, self.regs.f]),
+            RegisterType::BC => u16::from_be_bytes([self.regs.b, self.regs.c]),
+            RegisterType::DE => u16::from_be_bytes([self.regs.d, self.regs.e]),
+            RegisterType::HL => u16::from_be_bytes([self.regs.h, self.regs.l]),
+            RegisterType::SP => self.regs.sp,
+            RegisterType::PC => self.regs.pc,
+            RegisterType::NONE => panic!("Non existent register occurred"),
         }
     }
-
     pub fn set_register_value(&mut self, register: RegisterType, val: u16) {
-        let (low_byte, high_byte) = val.clone().separate_bytes();
         match register {
-            RegisterType::A => self.regs.a = low_byte,
-            RegisterType::B => self.regs.b = low_byte,
-            RegisterType::C => self.regs.c = low_byte,
-            RegisterType::D => self.regs.d = low_byte,
-            RegisterType::E => self.regs.e = low_byte,
-            RegisterType::H => self.regs.h = low_byte,
-            RegisterType::L => self.regs.l = low_byte,
-            RegisterType::F => self.regs.f = low_byte,
+            RegisterType::A => self.regs.a = val as u8,
+            RegisterType::B => self.regs.b = val as u8,
+            RegisterType::C => self.regs.c = val as u8,
+            RegisterType::D => self.regs.d = val as u8,
+            RegisterType::E => self.regs.e = val as u8,
+            RegisterType::H => self.regs.h = val as u8,
+            RegisterType::L => self.regs.l = val as u8,
+            RegisterType::F => self.regs.f = val as u8,
             RegisterType::AF => {
-                self.regs.a = high_byte;
-                self.regs.f = low_byte;
+                self.regs.a = (val >> 8) as u8;
+                self.regs.f = val as u8 & 0xF0; // Only upper 4 bits are used in F
             }
             RegisterType::BC => {
-                self.regs.b = high_byte;
-                self.regs.c = low_byte;
+                self.regs.b = (val >> 8) as u8;
+                self.regs.c = val as u8;
             }
             RegisterType::DE => {
-                self.regs.d = high_byte;
-                self.regs.e = low_byte;
+                self.regs.d = (val >> 8) as u8;
+                self.regs.e = val as u8;
             }
             RegisterType::HL => {
-                self.regs.h = high_byte;
-                self.regs.l = low_byte;
+                self.regs.h = (val >> 8) as u8;
+                self.regs.l = val as u8;
             }
-            // RegisterType::NONE => todo!(),
-            _ => {}
+            RegisterType::SP => self.regs.sp = val,
+            RegisterType::PC => self.regs.pc = val,
+            RegisterType::NONE => panic!("Attempt to set non-existent register"),
+        }
+    }
+    pub fn cpu_read_reg8(&self, memory: &Memory, rt: RegisterType) -> u8 {
+        match rt {
+            RegisterType::A => self.regs.a,
+            RegisterType::B => self.regs.b,
+            RegisterType::C => self.regs.c,
+            RegisterType::D => self.regs.d,
+            RegisterType::E => self.regs.e,
+            RegisterType::H => self.regs.h,
+            RegisterType::L => self.regs.l,
+            RegisterType::F => self.regs.f,
+            RegisterType::HL => {
+                let address = self.get_register_value(&RegisterType::HL);
+                memory.read(address as usize) // Assuming you have a bus_read method
+            }
+            _ => panic!("Invalid 8-bit register type: {:?}", rt),
         }
     }
 
+    pub fn cpu_set_reg8(&mut self, memory: &mut Memory, rt: RegisterType, val: u8) {
+        match rt {
+            RegisterType::A => self.regs.a = val,
+            RegisterType::B => self.regs.b = val,
+            RegisterType::C => self.regs.c = val,
+            RegisterType::D => self.regs.d = val,
+            RegisterType::E => self.regs.e = val,
+            RegisterType::H => self.regs.h = val,
+            RegisterType::L => self.regs.l = val,
+            RegisterType::F => self.regs.f = val & 0xF0, // Ensure lower 4 bits are always 0
+            RegisterType::HL => {
+                let address = self.get_register_value(&RegisterType::HL);
+                memory.write(address as usize, val) // Assuming you have a bus_write method
+            }
+            _ => panic!("Invalid 8-bit register type: {:?}", rt),
+        }
+    }
     fn check_condition(&self) -> bool {
-        let z: bool = (self.regs.f & 0b01000000) != 0;
-        let c: bool = (self.regs.f & 0b00001000) != 0;
         match self.current_instruction.condition {
             ConditionType::NONE => return true,
-            ConditionType::NZ => return !z,
-            ConditionType::Z => return z,
-            ConditionType::NC => return !c,
-            ConditionType::C => return c,
+            ConditionType::NZ => return !self.flag_z(),
+            ConditionType::Z => return self.flag_z(),
+            ConditionType::NC => return !self.flag_c(),
+            ConditionType::C => return self.flag_c(),
         }
     }
     fn goto_addr(&mut self, addr: u16, memory: &mut Memory, push_pc: bool) {
@@ -444,7 +526,7 @@ impl CPU {
             //     "Going from {:#X} to {:#X}. reg_1: {}, reg_val: {} pushing pc: {}",
             //     self.regs.pc,
             //     addr,
-            //     Instruction::register_mnemonic(&self.current_instruction.register_1),
+            //     self.current_instruction.register_1,
             //     self.get_register_value(&self.current_instruction.register_1),
             //     push_pc
             // );
@@ -455,6 +537,135 @@ impl CPU {
             self.regs.pc = addr;
             self.emu_cycles(1);
         }
+    }
+
+    fn run_cb(&mut self, memory: &mut Memory) {
+        let operation = self.fetched_data;
+        let register = RegisterType::decode(operation as usize & 0b111);
+        let bit = (operation >> 3) & 0b111;
+        let bit_op = (operation >> 6) & 0b11;
+        let mut reg_val = self.cpu_read_reg8(memory, register.clone());
+
+        self.emu_cycles(1);
+
+        if register == RegisterType::HL {
+            self.emu_cycles(2);
+        }
+
+        match bit_op {
+            1 => {
+                //BIT
+                self.set_flags(!(reg_val & (1 << bit)) as i8, 0, 1, -1);
+                return;
+            }
+            2 => {
+                //RST
+                reg_val &= !(1 << bit);
+                self.cpu_set_reg8(memory, register, reg_val);
+                return;
+            }
+
+            3 => {
+                //SET
+                reg_val |= 1 << bit;
+                self.cpu_set_reg8(memory, register, reg_val);
+                return;
+            }
+            _ => {}
+        }
+
+        let flag_c = self.flag_c();
+
+        match bit {
+            0 => {
+                //RLC
+                let mut set_c = false;
+                let mut result = (reg_val << 1) & 0xFF;
+
+                if (reg_val & (1 << 7)) != 0 {
+                    result |= 1;
+                    set_c = true;
+                }
+
+                self.cpu_set_reg8(memory, register, result);
+                self.set_flags((result == 0) as i8, 0, 0, set_c as i8);
+                return;
+            }
+
+            1 => {
+                //RRC
+                let old = reg_val;
+                reg_val >>= 1;
+                reg_val |= old << 7;
+
+                self.cpu_set_reg8(memory, register, reg_val);
+                self.set_flags(!reg_val as i8, 0, 0, old as i8 & 1);
+                return;
+            }
+
+            2 => {
+                //RL
+                let old = reg_val;
+                reg_val <<= 1;
+                reg_val |= flag_c as u8;
+
+                self.cpu_set_reg8(memory, register, reg_val);
+                self.set_flags(!reg_val as i8, 0, 0, !!(old & 0x80) as i8);
+                return;
+            }
+
+            3 => {
+                //RR
+                let old = reg_val;
+                reg_val >>= 1;
+
+                reg_val |= (flag_c as u8) << 7;
+
+                self.cpu_set_reg8(memory, register, reg_val);
+                self.set_flags(!reg_val as i8, 0, 0, old as i8 & 1);
+                return;
+            }
+
+            4 => {
+                //SLA
+                let old = reg_val;
+                reg_val <<= 1;
+
+                self.cpu_set_reg8(memory, register, reg_val);
+                self.set_flags(!reg_val as i8, 0, 0, !!(old & 0x80) as i8);
+                return;
+            }
+
+            5 => {
+                //SRA
+                let u = reg_val as i8 >> 1;
+                self.cpu_set_reg8(memory, register, u as u8);
+                self.set_flags(!u, 0, 0, reg_val as i8 & 1);
+                return;
+            }
+
+            6 => {
+                //SWAP
+                reg_val = ((reg_val & 0xF0) >> 4) | ((reg_val & 0xF) << 4);
+                self.cpu_set_reg8(memory, register, reg_val);
+                self.set_flags((reg_val == 0) as i8, 0, 0, 0);
+                return;
+            }
+
+            7 => {
+                //SRL
+                let u = reg_val >> 1;
+                self.cpu_set_reg8(memory, register, u);
+                self.set_flags(!u as i8, 0, 0, reg_val as i8 & 1);
+                return;
+            }
+            _ => {
+                panic!("ERROR: INVALID CB: {operation}");
+            }
+        }
+
+        // fprintf(stderr, "ERROR: INVALID CB: %02X", op);
+        // NO_IMPL
     }
 }
 

@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::libs::cartridge::Cartridge;
 use crate::libs::cpu::CPU;
 use crate::libs::instruction::*;
@@ -48,13 +50,18 @@ impl GameBoyEngine {
 
     pub fn start(&mut self) {
         let mut n = 0;
-        while self.running && n < 0x30 {
-            print!("*               {:#04x} ", self.cpu.regs.pc);
+        let now = Instant::now();
+
+        while self.running
+        // && n < 0xff
+        {
+            print!("{n:#04X} - ");
             if !self.cpu_step() {
                 self.running = false;
             }
-            // n += 1;
+            n += 1;
         }
+        println!("Finished in: {:.2?}", now.elapsed());
     }
 
     pub fn cpu_step(&mut self) -> bool {
@@ -63,7 +70,8 @@ impl GameBoyEngine {
         let second_byte = self.memory.read((self.cpu.regs.pc + 2) as usize);
         let inst = Instruction::from_opcode(&opcode);
         println!(
-            "{} ({:02X} {:02X} {:02X}) A:{:02X} F:{}, BC:{:02X}{:02X}, DE:{:02X}{:02X}, HL:{:02X}{:02X}, SP:{:05}, Stack Last: {:#06X},{:#06X},{:#06X},{:#06X},{:#06X}",
+            "{:#04X} {} ({:02X} {:02X} {:02X}) A:{:02X} F:{}, BC:{:02X}{:02X}, DE:{:02X}{:02X}, HL:{:02X}{:02X}, SP:{:05}, Stack: {:#06X}",//,{:#06X},{:#06X},{:#06X},{:#06X}",
+            self.cpu.regs.pc,
             inst.to_string(),
             opcode,
             following_byte,
@@ -77,12 +85,12 @@ impl GameBoyEngine {
             self.cpu.regs.e,
             self.cpu.regs.h,
             self.cpu.regs.l,
-            (57343 - self.cpu.regs.sp) / 2,
+            (0xFFFE - self.cpu.regs.sp) / 2,
              self.memory.read16(self.cpu.regs.sp as usize),
-            self.memory.read16((self.cpu.regs.sp + 2) as usize),
-            self.memory.read16((self.cpu.regs.sp + 4) as usize),
-            self.memory.read16((self.cpu.regs.sp + 6) as usize),
-            self.memory.read16((self.cpu.regs.sp + 8) as usize)
+            // self.memory.read16((self.cpu.regs.sp + 2) as usize),
+            // self.memory.read16((self.cpu.regs.sp + 4) as usize),
+            // self.memory.read16((self.cpu.regs.sp + 6) as usize),
+            // self.memory.read16((self.cpu.regs.sp + 8) as usize)
         );
         self.cpu.current_instruction = inst;
         self.cpu.destination_is_mem = false;

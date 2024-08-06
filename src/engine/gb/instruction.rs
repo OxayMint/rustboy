@@ -1,6 +1,7 @@
+use core::fmt;
+
 // pub use AddressMode;
 // pub use RegisterType;
-
 pub struct Instruction {
     pub instruction_type: InstructionType,
     pub address_mode: AddressMode,
@@ -13,7 +14,7 @@ pub struct Instruction {
     pub cycles: u8, //cycles count for NONE condition operations and for conditions that had taken action
     pub no_action_cycles: u8, //if condition is not NONE this should be set. it is the cycles count of the operation if the condition fails
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 
 pub enum AddressMode {
     IMPLIED,
@@ -39,7 +40,7 @@ pub enum AddressMode {
     R_A16,
 }
 
-#[derive(PartialEq, PartialOrd, Clone)]
+#[derive(PartialEq, PartialOrd, Clone, Debug)]
 pub enum RegisterType {
     NONE,
     A,
@@ -57,8 +58,8 @@ pub enum RegisterType {
     SP,
     PC,
 }
-#[derive(PartialEq)]
 
+#[derive(PartialEq, Debug)]
 pub enum InstructionType {
     NONE,
     NOP,
@@ -110,7 +111,42 @@ pub enum InstructionType {
     RES,
     SET,
 }
-#[derive(PartialEq)]
+impl RegisterType {
+    pub fn decode(reg: usize) -> RegisterType {
+        if reg > 0b111 {
+            RegisterType::NONE
+        } else {
+            [
+                RegisterType::B,
+                RegisterType::C,
+                RegisterType::D,
+                RegisterType::E,
+                RegisterType::H,
+                RegisterType::L,
+                RegisterType::HL,
+                RegisterType::A,
+            ][reg]
+                .clone()
+        }
+    }
+}
+impl fmt::Display for RegisterType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Display for AddressMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}",)
+    }
+}
+impl fmt::Display for InstructionType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+#[derive(PartialEq, Debug)]
 pub enum ConditionType {
     NONE,
     NZ,
@@ -787,18 +823,12 @@ impl Instruction {
                 condition: ConditionType::Z,
                 ..Default::default()
             },
-            0xCB =>
-            //todo!("CB's are not implemented yet!"),
-            // Instruction {
-            // instruction_type: InstructionType::PREFIX,
+            0xCB => Instruction {
+                instruction_type: InstructionType::CB,
+                address_mode: AddressMode::D8,
+                ..Default::default()
+            },
 
-            // ..Default::default()
-            // },
-            {
-                Instruction {
-                    ..Default::default()
-                }
-            }
             0xCC => Instruction {
                 instruction_type: InstructionType::CALL,
                 address_mode: AddressMode::D16,
@@ -1079,27 +1109,25 @@ impl Instruction {
             },
         };
         inst.length = Instruction::length(&inst);
-        let cycles = Instruction::get_cycles_count(&inst);
-        (inst.cycles, inst.no_action_cycles) = (cycles.0, cycles.1.unwrap_or(0));
         inst.opcode = *code;
         return inst;
     }
     // Instruction {}
-    pub fn start_opcodetests() {
-        for n in 0x00..=0xff {
-            println!("{:x}: {}", n, Instruction::from_opcode(&n).to_string());
-        }
-    }
+    // pub fn start_opcodetests() {
+    //     for n in 0x00..=0xff {
+    //         println!("{:x}: {}", n, Instruction::from_opcode(&n).to_string());
+    //     }
+    // }
     pub fn to_string(&self) -> String {
         return format!(
-            "{: <4} {: <7} {: <2} {: <2}  {} {: >2}/{: >2}",
-            Instruction::instruction_type_mnemonic(&self.instruction_type),
-            Instruction::address_mode_mnemonic(&self.address_mode),
-            Instruction::register_mnemonic(&self.register_1),
-            Instruction::register_mnemonic(&self.register_2),
-            self.length,
-            self.cycles,
-            self.no_action_cycles
+            "{: <5} {: <8} {: <2} {: <2}  {} {: >2}/{: >2}",
+            self.instruction_type.to_string(),
+            self.address_mode.to_string(),
+            self.register_1.to_string(),
+            self.register_2.to_string(),
+            self.length.to_string(),
+            self.cycles.to_string(),
+            self.no_action_cycles.to_string()
         );
     }
     pub fn length(inst: &Instruction) -> u8 {
@@ -1124,175 +1152,80 @@ impl Instruction {
             | AddressMode::D16 => 3,
         }
     }
-    pub fn get_cycles_count(inst: &Instruction) -> (u8, Option<u8>) {
-        match (&inst.instruction_type, &inst.address_mode, &inst.condition) {
-            // Conditional instructions
-            (InstructionType::JR, _, ConditionType::NONE) => (12, None),
-            (InstructionType::JR, _, _) => (12, Some(8)),
-            (InstructionType::JP, AddressMode::D16, ConditionType::NONE) => (16, None),
-            (InstructionType::JP, AddressMode::D16, _) => (16, Some(12)),
-            (InstructionType::CALL, _, ConditionType::NONE) => (24, None),
-            (InstructionType::CALL, _, _) => (24, Some(12)),
-            (InstructionType::RET, _, ConditionType::NONE) => (16, None),
-            (InstructionType::RET, _, _) => (20, Some(8)),
+    // pub fn get_cycles_count(inst: &Instruction) -> (u8, Option<u8>) {
+    //     match (&inst.instruction_type, &inst.address_mode, &inst.condition) {
+    //         // Conditional instructions
+    //         (InstructionType::JR, _, ConditionType::NONE) => (12, None),
+    //         (InstructionType::JR, _, _) => (12, Some(8)),
+    //         (InstructionType::JP, AddressMode::D16, ConditionType::NONE) => (16, None),
+    //         (InstructionType::JP, AddressMode::D16, _) => (16, Some(12)),
+    //         (InstructionType::CALL, _, ConditionType::NONE) => (24, None),
+    //         (InstructionType::CALL, _, _) => (24, Some(12)),
+    //         (InstructionType::RET, _, ConditionType::NONE) => (16, None),
+    //         (InstructionType::RET, _, _) => (20, Some(8)),
 
-            // Non-conditional instructions
-            (InstructionType::NOP, _, _) => (4, None),
-            (InstructionType::LD, AddressMode::R_R, _) => (4, None),
-            (InstructionType::LD, AddressMode::R_D16, _) => (12, None),
-            (InstructionType::LD, AddressMode::R_D8, _) => (8, None),
-            (InstructionType::LD, AddressMode::R_MR, _) => (8, None),
-            (InstructionType::LD, AddressMode::MR_R, _) => (8, None),
-            (InstructionType::LD, AddressMode::R_HLI, _)
-            | (InstructionType::LD, AddressMode::R_HLD, _) => (8, None),
-            (InstructionType::LD, AddressMode::HLI_R, _)
-            | (InstructionType::LD, AddressMode::HLD_R, _) => (8, None),
-            (InstructionType::LD, AddressMode::A16_R, _) => (16, None),
-            (InstructionType::LD, AddressMode::R_A16, _) => (16, None),
-            (InstructionType::LD, AddressMode::HL_SPR, _) => (12, None),
-            (InstructionType::INC, AddressMode::R, _)
-            | (InstructionType::DEC, AddressMode::R, _) => (4, None),
-            (InstructionType::INC, AddressMode::MR, _)
-            | (InstructionType::DEC, AddressMode::MR, _) => (12, None),
-            (InstructionType::RLCA, _, _)
-            | (InstructionType::RRCA, _, _)
-            | (InstructionType::RLA, _, _)
-            | (InstructionType::RRA, _, _) => (4, None),
-            (InstructionType::ADD, AddressMode::R_R, _) if inst.register_1 == RegisterType::HL => {
-                (8, None)
-            }
-            (InstructionType::ADD, AddressMode::R_R, _) => (4, None),
-            (InstructionType::ADD, AddressMode::R_D8, _) => (8, None),
-            (InstructionType::DAA, _, _)
-            | (InstructionType::CPL, _, _)
-            | (InstructionType::SCF, _, _)
-            | (InstructionType::CCF, _, _) => (4, None),
-            (InstructionType::HALT, _, _) => (4, None),
-            (InstructionType::ADC, AddressMode::R_R, _)
-            | (InstructionType::SBC, AddressMode::R_R, _) => (4, None),
-            (InstructionType::ADC, AddressMode::R_D8, _)
-            | (InstructionType::SBC, AddressMode::R_D8, _) => (8, None),
-            (InstructionType::AND, AddressMode::R_R, _)
-            | (InstructionType::XOR, AddressMode::R_R, _)
-            | (InstructionType::OR, AddressMode::R_R, _)
-            | (InstructionType::CP, AddressMode::R_R, _) => (4, None),
-            (InstructionType::AND, AddressMode::R_D8, _)
-            | (InstructionType::XOR, AddressMode::R_D8, _)
-            | (InstructionType::OR, AddressMode::R_D8, _)
-            | (InstructionType::CP, AddressMode::R_D8, _) => (8, None),
-            (InstructionType::POP, _, _) => (12, None),
-            (InstructionType::PUSH, _, _) => (16, None),
-            (InstructionType::JP, AddressMode::R, _) => (4, None),
-            (InstructionType::RST, _, _) => (16, None),
-            // (InstructionType::PREFIX, _, _) => (4, None),
-            (InstructionType::RETI, _, _) => (16, None),
-            (InstructionType::LDH, _, _) => (12, None),
-            (InstructionType::DI, _, _) | (InstructionType::EI, _, _) => (4, None),
-            (InstructionType::STOP, _, _) => (4, None),
-            (InstructionType::SUB, AddressMode::R_R, _)
-            | (InstructionType::SUB, AddressMode::R_MR, _) => (4, None),
-            (InstructionType::SUB, AddressMode::R_D8, _) => (8, None),
+    //         // Non-conditional instructions
+    //         (InstructionType::NOP, _, _) => (4, None),
+    //         (InstructionType::LD, AddressMode::R_R, _) => (4, None),
+    //         (InstructionType::LD, AddressMode::R_D16, _) => (12, None),
+    //         (InstructionType::LD, AddressMode::R_D8, _) => (8, None),
+    //         (InstructionType::LD, AddressMode::R_MR, _) => (8, None),
+    //         (InstructionType::LD, AddressMode::MR_R, _) => (8, None),
+    //         (InstructionType::LD, AddressMode::R_HLI, _)
+    //         | (InstructionType::LD, AddressMode::R_HLD, _) => (8, None),
+    //         (InstructionType::LD, AddressMode::HLI_R, _)
+    //         | (InstructionType::LD, AddressMode::HLD_R, _) => (8, None),
+    //         (InstructionType::LD, AddressMode::A16_R, _) => (16, None),
+    //         (InstructionType::LD, AddressMode::R_A16, _) => (16, None),
+    //         (InstructionType::LD, AddressMode::HL_SPR, _) => (12, None),
+    //         (InstructionType::INC, AddressMode::R, _)
+    //         | (InstructionType::DEC, AddressMode::R, _) => (4, None),
+    //         (InstructionType::INC, AddressMode::MR, _)
+    //         | (InstructionType::DEC, AddressMode::MR, _) => (12, None),
+    //         (InstructionType::RLCA, _, _)
+    //         | (InstructionType::RRCA, _, _)
+    //         | (InstructionType::RLA, _, _)
+    //         | (InstructionType::RRA, _, _) => (4, None),
+    //         (InstructionType::ADD, AddressMode::R_R, _) if inst.register_1 == RegisterType::HL => {
+    //             (8, None)
+    //         }
+    //         (InstructionType::ADD, AddressMode::R_R, _) => (4, None),
+    //         (InstructionType::ADD, AddressMode::R_D8, _) => (8, None),
+    //         (InstructionType::DAA, _, _)
+    //         | (InstructionType::CPL, _, _)
+    //         | (InstructionType::SCF, _, _)
+    //         | (InstructionType::CCF, _, _) => (4, None),
+    //         (InstructionType::HALT, _, _) => (4, None),
+    //         (InstructionType::ADC, AddressMode::R_R, _)
+    //         | (InstructionType::SBC, AddressMode::R_R, _) => (4, None),
+    //         (InstructionType::ADC, AddressMode::R_D8, _)
+    //         | (InstructionType::SBC, AddressMode::R_D8, _) => (8, None),
+    //         (InstructionType::AND, AddressMode::R_R, _)
+    //         | (InstructionType::XOR, AddressMode::R_R, _)
+    //         | (InstructionType::OR, AddressMode::R_R, _)
+    //         | (InstructionType::CP, AddressMode::R_R, _) => (4, None),
+    //         (InstructionType::AND, AddressMode::R_D8, _)
+    //         | (InstructionType::XOR, AddressMode::R_D8, _)
+    //         | (InstructionType::OR, AddressMode::R_D8, _)
+    //         | (InstructionType::CP, AddressMode::R_D8, _) => (8, None),
+    //         (InstructionType::POP, _, _) => (12, None),
+    //         (InstructionType::PUSH, _, _) => (16, None),
+    //         (InstructionType::JP, AddressMode::R, _) => (4, None),
+    //         (InstructionType::RST, _, _) => (16, None),
 
-            // Default case
-            _ => (4, None),
-        }
-    }
-    pub fn register_mnemonic(reg: &RegisterType) -> &str {
-        match reg {
-            RegisterType::NONE => "NONE",
-            RegisterType::A => "A",
-            RegisterType::F => "F",
-            RegisterType::B => "B",
-            RegisterType::C => "C",
-            RegisterType::D => "D",
-            RegisterType::E => "E",
-            RegisterType::H => "H",
-            RegisterType::L => "L",
-            RegisterType::AF => "AF",
-            RegisterType::BC => "BC",
-            RegisterType::DE => "DE",
-            RegisterType::HL => "HL",
-            RegisterType::SP => "SP",
-            RegisterType::PC => "PC",
-        }
-    }
-    pub fn address_mode_mnemonic(addr_mode: &AddressMode) -> &str {
-        match addr_mode {
-            AddressMode::IMPLIED => "IMPLIED",
-            AddressMode::R_D16 => "R_D16",
-            AddressMode::R_R => "R_R",
-            AddressMode::MR_R => "MR_R",
-            AddressMode::R => "R",
-            AddressMode::R_D8 => "R_D8",
-            AddressMode::R_MR => "R_MR",
-            AddressMode::R_HLI => "R_HLI",
-            AddressMode::R_HLD => "R_HLD",
-            AddressMode::HLI_R => "HLI_R",
-            AddressMode::HLD_R => "HLD_R",
-            AddressMode::R_A8 => "R_A8",
-            AddressMode::A8_R => "A8_R",
-            AddressMode::HL_SPR => "HL_SPR",
-            AddressMode::D16 => "D16",
-            AddressMode::D8 => "D8",
-            AddressMode::D16_R => "D16_R",
-            AddressMode::MR_D8 => "MR_D8",
-            AddressMode::MR => "MR",
-            AddressMode::A16_R => "A16_R",
-            AddressMode::R_A16 => "R_A16",
-        }
-    }
-    pub fn instruction_type_mnemonic(inst_type: &InstructionType) -> &str {
-        match inst_type {
-            InstructionType::NONE => "NONE",
-            InstructionType::NOP => "NOP",
-            InstructionType::LD => "LD",
-            InstructionType::INC => "INC",
-            InstructionType::DEC => "DEC",
-            InstructionType::RLCA => "RLCA",
-            InstructionType::ADD => "ADD",
-            InstructionType::RRCA => "RRCA",
-            InstructionType::STOP => "STOP",
-            InstructionType::RLA => "RLA",
-            InstructionType::JR => "JR",
-            InstructionType::RRA => "RRA",
-            InstructionType::DAA => "DAA",
-            InstructionType::CPL => "CPL",
-            InstructionType::SCF => "SCF",
-            InstructionType::CCF => "CCF",
-            InstructionType::HALT => "HALT",
-            InstructionType::ADC => "ADC",
-            InstructionType::SUB => "SUB",
-            InstructionType::SBC => "SBC",
-            InstructionType::AND => "AND",
-            InstructionType::XOR => "XOR",
-            InstructionType::OR => "OR",
-            InstructionType::CP => "CP",
-            InstructionType::POP => "POP",
-            InstructionType::JP => "JP",
-            InstructionType::PUSH => "PUSH",
-            InstructionType::RET => "RET",
-            InstructionType::CB => "CB",
-            InstructionType::CALL => "CALL",
-            InstructionType::RETI => "RETI",
-            InstructionType::LDH => "LDH",
-            InstructionType::JPHL => "JPHL",
-            InstructionType::DI => "DI",
-            InstructionType::EI => "EI",
-            InstructionType::RST => "RST",
-            InstructionType::ERR => "ERR",
-            InstructionType::RLC => "RLC",
-            InstructionType::RRC => "RRC",
-            InstructionType::RL => "RL",
-            InstructionType::RR => "RR",
-            InstructionType::SLA => "SLA",
-            InstructionType::SRA => "SRA",
-            InstructionType::SWAP => "SWAP",
-            InstructionType::SRL => "SRL",
-            InstructionType::BIT => "BIT",
-            InstructionType::RES => "RES",
-            InstructionType::SET => "SET",
-        }
-    }
+    //         // (InstructionType::PREFIX, _, _) => (4, None),
+    //         (InstructionType::RETI, _, _) => (16, None),
+    //         (InstructionType::LDH, _, _) => (12, None),
+    //         (InstructionType::DI, _, _) | (InstructionType::EI, _, _) => (4, None),
+    //         (InstructionType::STOP, _, _) => (4, None),
+    //         (InstructionType::SUB, AddressMode::R_R, _)
+    //         | (InstructionType::SUB, AddressMode::R_MR, _) => (4, None),
+    //         (InstructionType::SUB, AddressMode::R_D8, _) => (8, None),
+
+    //         // Default case
+    //         _ => (4, None),
+    //     }
+    // }
 }
 
 impl Default for Instruction {
