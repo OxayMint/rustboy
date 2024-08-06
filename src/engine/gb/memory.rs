@@ -58,7 +58,8 @@ impl Memory {
             }
             0xFE00..0xFEA0 => {
                 //OAM
-                todo!("OAM not implemented yet")
+                // todo!("OAM not implemented yet")
+                return 0;
             }
             0xFEA0..0xFF00 => {
                 //useless part
@@ -66,13 +67,15 @@ impl Memory {
             }
             0xFF00..0xFF80 => {
                 //IO data
-                todo!("IO not implemented yet");
+                // todo!("IO not implemented yet");
+                return 0;
 
                 // self.ioram_read(address - 0xFF00)
             }
             0xFF80..0xFFFF => {
                 //high ram/zero page
-                todo!("hiram not done")
+                return 0;
+                // todo!("hiram not done")
             }
             //CPU Interrupt enable register
             0xFFFF => self.ie_register,
@@ -90,7 +93,7 @@ impl Memory {
             }
             0x8000..0xA000 => {
                 //Char/BG
-                todo!("OAM not implemented yet")
+                // todo!("OAM not implemented yet")
             }
             0xA000..0xC000 => {
                 //External RAM
@@ -105,7 +108,7 @@ impl Memory {
             }
             0xFE00..0xFEA0 => {
                 //OAM
-                todo!("OAM not implemented yet")
+                // todo!("OAM not implemented yet")
             }
             0xFEA0..0xFF00 => {
                 //unused part

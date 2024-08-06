@@ -99,17 +99,17 @@ pub enum InstructionType {
     RST,
     ERR,
     //CB instructions...
-    RLC,
-    RRC,
-    RL,
-    RR,
-    SLA,
-    SRA,
-    SWAP,
-    SRL,
-    BIT,
-    RES,
-    SET,
+    // RLC,
+    // RRC,
+    // RL,
+    // RR,
+    // SLA,
+    // SRA,
+    // SWAP,
+    // SRL,
+    // BIT,
+    // RES,
+    // SET,
 }
 impl RegisterType {
     pub fn decode(reg: usize) -> RegisterType {

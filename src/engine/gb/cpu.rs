@@ -16,6 +16,7 @@ pub struct CPU {
     pub stepping: bool,
     pub current_instruction: Instruction,
     pub int_master_enabled: bool,
+    pub ime_enabled: bool,
 }
 
 impl Registers {
@@ -55,6 +56,7 @@ impl CPU {
             halted: false,
             stepping: true,
             int_master_enabled: false,
+            ime_enabled: false,
             current_instruction: Instruction {
                 ..Default::default()
             },
@@ -71,9 +73,16 @@ impl CPU {
 
     pub fn emu_cycles(&mut self, cycles: u8) {}
     pub fn execute(&mut self, memory: &mut Memory) {
+        if self.halted {
+            return;
+        }
         match self.current_instruction.instruction_type {
-            InstructionType::NONE => panic!("Something not right here"),
-            InstructionType::NOP => {}
+            InstructionType::NONE => {
+                println!("just do nothings")
+            } //panic!("Something not right here"),
+            InstructionType::NOP => {
+                println!("NOP");
+            }
             InstructionType::LD => {
                 if self.destination_is_mem {
                     if self.current_instruction.register_2 >= RegisterType::AF {
@@ -228,14 +237,32 @@ impl CPU {
                 self.regs.a = (self.regs.a >> 1) | (old_c << 7);
                 self.set_flags(0, 0, 0, new_c as i8);
             }
-            InstructionType::DAA => todo!(),
+            InstructionType::DAA => {
+                let mut a = self.regs.a;
+                let mut adjust = 0;
+
+                if self.flag_h() || (a & 0xF) > 9 {
+                    adjust |= 0x06;
+                }
+                if self.flag_c() || (a >> 4) > 9 {
+                    adjust |= 0x60;
+                }
+
+                if self.flag_n() {
+                    a = a.wrapping_sub(adjust);
+                } else {
+                    a = a.wrapping_add(adjust);
+                }
+                self.regs.a = a;
+                self.set_flags((a == 0) as i8, -1, 0, (adjust >= 0x60) as i8);
+            }
             InstructionType::CPL => {
                 self.regs.a = !self.regs.a;
                 self.set_flags(-1, 1, 1, -1)
             }
-            InstructionType::SCF => todo!(),
+            InstructionType::SCF => self.set_flags(-1, 1, 1, 1),
             InstructionType::CCF => self.set_flags(-1, 0, 0, !self.flag_c() as i8),
-            InstructionType::HALT => self.set_flags(-1, 0, 0, 1),
+            InstructionType::HALT => self.halted = true,
             InstructionType::ADC => {
                 let d = self.fetched_data;
                 let a = self.regs.a as u16;
@@ -332,45 +359,46 @@ impl CPU {
                 }
             }
             InstructionType::LDH => {
-                // self.mem_dest = self.mem_dest.wrapping_add(0xFF00);
-                // //Load value in register A from the byte at address n16, provided the address is between $FF00 and $FFFF.
-                // if self.destination_is_mem {
-                //     memory.write(self.mem_dest, self.fetched_data as u8);
-                //     self.emu_cycles(1);
-                // } else {
-                //     self.regs.a = self.fetched_data as u8;
-                // }
-                let addr = self.mem_dest | 0xFF00;
-                if self.destination_is_mem {
-                    memory.write(addr, self.fetched_data as u8);
-                } else {
+                if self.current_instruction.register_1 == RegisterType::A {
                     self.set_register_value(
-                        self.current_instruction.register_1.clone(),
-                        addr as u16,
+                        RegisterType::A,
+                        memory.read16((0xFF00 | self.fetched_data) as usize),
                     );
+                } else {
+                    memory.write(self.mem_dest, self.fetched_data as u8);
                 }
+
+                // let addr = self.mem_dest | 0xFF00;
+                // if self.destination_is_mem {
+                //     memory.write(addr, self.fetched_data as u8);
+                // } else {
+                //     self.set_register_value(
+                //         self.current_instruction.register_1.clone(),
+                //         addr as u16,
+                //     );
+                // }
                 self.emu_cycles(1);
             }
             InstructionType::JPHL => todo!(),
             InstructionType::DI => {
                 self.int_master_enabled = false;
             }
-            InstructionType::EI => todo!(),
+            InstructionType::EI => self.ime_enabled = true,
             InstructionType::RST => {
                 self.goto_addr(self.current_instruction.rst_vec as u16, memory, true);
             }
             InstructionType::ERR => todo!(),
-            InstructionType::RLC => todo!(),
-            InstructionType::RRC => todo!(),
-            InstructionType::RL => todo!(),
-            InstructionType::RR => todo!(),
-            InstructionType::SLA => todo!(),
-            InstructionType::SRA => todo!(),
-            InstructionType::SWAP => todo!(),
-            InstructionType::SRL => todo!(),
-            InstructionType::BIT => todo!(),
-            InstructionType::RES => todo!(),
-            InstructionType::SET => todo!(),
+            // InstructionType::RLC => todo!(),
+            // InstructionType::RRC => todo!(),
+            // InstructionType::RL => todo!(),
+            // InstructionType::RR => todo!(),
+            // InstructionType::SLA => todo!(),
+            // InstructionType::SRA => todo!(),
+            // InstructionType::SWAP => todo!(),
+            // InstructionType::SRL => todo!(),
+            // InstructionType::BIT => todo!(),
+            // InstructionType::RES => todo!(),
+            // InstructionType::SET => todo!(),
         }
         // self.emu_cycles(if self.check_condition() {
         //     self.current_instruction.cycles
@@ -540,6 +568,7 @@ impl CPU {
     }
 
     fn run_cb(&mut self, memory: &mut Memory) {
+        println!("RUNNING CB OP");
         let operation = self.fetched_data;
         let register = RegisterType::decode(operation as usize & 0b111);
         let bit = (operation >> 3) & 0b111;
@@ -551,11 +580,11 @@ impl CPU {
         if register == RegisterType::HL {
             self.emu_cycles(2);
         }
-
         match bit_op {
             1 => {
                 //BIT
-                self.set_flags(!(reg_val & (1 << bit)) as i8, 0, 1, -1);
+                let z: u8 = !(reg_val & (1 << bit) != 0) as u8;
+                self.set_flags(z as i8, 0, 1, -1);
                 return;
             }
             2 => {
@@ -599,7 +628,7 @@ impl CPU {
                 reg_val |= old << 7;
 
                 self.cpu_set_reg8(memory, register, reg_val);
-                self.set_flags(!reg_val as i8, 0, 0, old as i8 & 1);
+                self.set_flags((reg_val != 0) as i8, 0, 0, old as i8 & 1);
                 return;
             }
 
@@ -610,7 +639,7 @@ impl CPU {
                 reg_val |= flag_c as u8;
 
                 self.cpu_set_reg8(memory, register, reg_val);
-                self.set_flags(!reg_val as i8, 0, 0, !!(old & 0x80) as i8);
+                self.set_flags((reg_val != 0) as i8, 0, 0, !!(old & 0x80) as i8);
                 return;
             }
 
@@ -622,7 +651,7 @@ impl CPU {
                 reg_val |= (flag_c as u8) << 7;
 
                 self.cpu_set_reg8(memory, register, reg_val);
-                self.set_flags(!reg_val as i8, 0, 0, old as i8 & 1);
+                self.set_flags((reg_val != 0) as i8, 0, 0, old as i8 & 1);
                 return;
             }
 
@@ -632,7 +661,7 @@ impl CPU {
                 reg_val <<= 1;
 
                 self.cpu_set_reg8(memory, register, reg_val);
-                self.set_flags(!reg_val as i8, 0, 0, !!(old & 0x80) as i8);
+                self.set_flags((reg_val != 0) as i8, 0, 0, !!(old & 0x80) as i8);
                 return;
             }
 
@@ -640,7 +669,7 @@ impl CPU {
                 //SRA
                 let u = reg_val as i8 >> 1;
                 self.cpu_set_reg8(memory, register, u as u8);
-                self.set_flags(!u, 0, 0, reg_val as i8 & 1);
+                self.set_flags((u != 0) as i8, 0, 0, reg_val as i8 & 1);
                 return;
             }
 
@@ -656,16 +685,13 @@ impl CPU {
                 //SRL
                 let u = reg_val >> 1;
                 self.cpu_set_reg8(memory, register, u);
-                self.set_flags(!u as i8, 0, 0, reg_val as i8 & 1);
+                self.set_flags((u != 0) as i8, 0, 0, reg_val as i8 & 1);
                 return;
             }
             _ => {
                 panic!("ERROR: INVALID CB: {operation}");
             }
         }
-
-        // fprintf(stderr, "ERROR: INVALID CB: %02X", op);
-        // NO_IMPL
     }
 }
 

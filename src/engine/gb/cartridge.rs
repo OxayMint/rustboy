@@ -14,6 +14,13 @@ impl Cartridge {
         let cart_data = Cartridge::cart_load(path);
         if cart_data.is_some() {
             let unwrapped_data = cart_data.unwrap();
+            for row in 0..16 {
+                let ptr = row + 0x100;
+                for idx in 0..16 {
+                    print!("{:02X} ", unwrapped_data[idx + ptr]);
+                }
+                print!("\n")
+            }
             match Cartridge::get_info(&unwrapped_data) {
                 Ok(info) => Ok(Cartridge {
                     info: info,
@@ -35,7 +42,7 @@ impl Cartridge {
 
     pub fn read(&self, address: usize) -> u8 {
         // return &0;
-        return self.data[address.clone()];
+        return self.data[address];
     }
     pub fn write(&self, address: usize, value: u8) {}
 

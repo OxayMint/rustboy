@@ -51,13 +51,14 @@ impl GameBoyEngine {
     pub fn start(&mut self) {
         let mut n = 0;
         let now = Instant::now();
-
-        while self.running
-        // && n < 0xff
-        {
+        // return;
+        while self.running && n < 0xff {
             print!("{n:#04X} - ");
             if !self.cpu_step() {
                 self.running = false;
+            }
+            if (n > 0x12cd9) {
+                self.cpu.halted = true;
             }
             n += 1;
         }
