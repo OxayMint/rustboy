@@ -2,6 +2,11 @@
 name = "rustboy"
 version = "0.1.0"
 edition = "2021"
+build = "./src/build.rs"
 
 [dependencies]
+miniquad = "0.4.5"
 byteorder = "1.4"
+raylib = "5.0.1"
+
+

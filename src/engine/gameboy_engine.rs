@@ -1,279 +1,91 @@
-use std::time::Instant;
-
 use crate::libs::cartridge::Cartridge;
 use crate::libs::cpu::CPU;
-use crate::libs::instruction::*;
 use crate::libs::memory::Memory;
 use crate::libs::rendering::Renderer;
 use crate::libs::timer::Timer;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+use std::thread;
+use std::time::Duration;
 
-use super::SetBytes;
-
-// extern crate sdl2;
-
-/*
-  Emulator components:
-
-  |Cart|
-  |CPU|
-  |Address Bus|
-  |PPU|
-  |Timer|
-
-*/
 pub struct GameBoyEngine {
-    pub paused: bool,
-    pub running: bool,
-    pub cpu: CPU,
-    pub renderer: Renderer,
-    pub timer: Timer,
-    pub memory: Memory,
-    pub ticks: u32,
-    pub stack: Vec<u8>,
+    pub paused: Arc<AtomicBool>,
+    pub running: Arc<AtomicBool>,
+    // pub renderer: Renderer,
+    pub memory: Arc<Mutex<Memory>>,
+    // pub timer: Timer,
+    pub ticks: Arc<Mutex<u32>>,
+    // pub stack: Vec<u8>,
 }
 
 impl GameBoyEngine {
     pub fn new(path: &str) -> GameBoyEngine {
         let cartridge = Cartridge::from_path(path).unwrap();
-        let engine = GameBoyEngine {
-            cpu: CPU::new(),
-            renderer: Renderer::new(),
-            timer: Timer::new(),
-            memory: Memory::new(cartridge),
-            paused: false,
-            running: true,
-            stack: vec![],
-            ticks: 0,
-        };
-        return engine;
+        let memory = Memory::new(cartridge);
+
+        GameBoyEngine {
+            // renderer: Renderer::new(),
+            memory: Arc::new(Mutex::new(memory)),
+            paused: Arc::new(AtomicBool::new(false)),
+            running: Arc::new(AtomicBool::new(true)),
+            // timer: Timer::new(),
+            // stack: vec![],
+            ticks: Arc::new(Mutex::new(0)),
+        }
     }
 
     pub fn start(&mut self) {
-        let mut n = 0;
-        let now = Instant::now();
-        // return;
-        while self.running && n < 0xff {
-            print!("{n:#04X} - ");
-            if !self.cpu_step() {
-                self.running = false;
-            }
-            if (n > 0x12cd9) {
-                self.cpu.halted = true;
-            }
-            n += 1;
-        }
-        println!("Finished in: {:.2?}", now.elapsed());
-    }
+        let memory = Arc::clone(&self.memory);
+        let running = Arc::clone(&self.running);
+        let paused = Arc::clone(&self.paused);
+        let ticks = Arc::clone(&self.ticks);
 
-    pub fn cpu_step(&mut self) -> bool {
-        let opcode = self.memory.read(self.cpu.regs.pc as usize);
-        let following_byte = self.memory.read((self.cpu.regs.pc + 1) as usize);
-        let second_byte = self.memory.read((self.cpu.regs.pc + 2) as usize);
-        let inst = Instruction::from_opcode(&opcode);
-        println!(
-            "{:#04X} {} ({:02X} {:02X} {:02X}) A:{:02X} F:{}, BC:{:02X}{:02X}, DE:{:02X}{:02X}, HL:{:02X}{:02X}, SP:{:05}, Stack: {:#06X}",//,{:#06X},{:#06X},{:#06X},{:#06X}",
-            self.cpu.regs.pc,
-            inst.to_string(),
-            opcode,
-            following_byte,
-            second_byte,
-            self.cpu.regs.a,
-            // self.cpu.regs.f,
-            self.cpu.regs.get_flags_mnemonic(),
-            self.cpu.regs.b,
-            self.cpu.regs.c,
-            self.cpu.regs.d,
-            self.cpu.regs.e,
-            self.cpu.regs.h,
-            self.cpu.regs.l,
-            (0xFFFE - self.cpu.regs.sp) / 2,
-             self.memory.read16(self.cpu.regs.sp as usize),
-            // self.memory.read16((self.cpu.regs.sp + 2) as usize),
-            // self.memory.read16((self.cpu.regs.sp + 4) as usize),
-            // self.memory.read16((self.cpu.regs.sp + 6) as usize),
-            // self.memory.read16((self.cpu.regs.sp + 8) as usize)
-        );
-        self.cpu.current_instruction = inst;
-        self.cpu.destination_is_mem = false;
-        self.cpu.increment_pointer(1);
-        self.fetch_data();
-
-        self.cpu.execute(&mut self.memory);
-
-        return true;
-    }
-
-    pub fn fetch_data(&mut self) {
-        let pc = self.cpu.regs.pc as usize;
-        self.cpu.fetched_data = match self.cpu.current_instruction.address_mode {
-            AddressMode::IMPLIED | AddressMode::R => self
-                .cpu
-                .get_register_value(&self.cpu.current_instruction.register_1),
-
-            AddressMode::R_R => self
-                .cpu
-                .get_register_value(&self.cpu.current_instruction.register_2),
-            AddressMode::MR_R => {
-                self.cpu.mem_dest = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_1)
-                    as usize;
-                self.cpu.destination_is_mem = true;
-                if self.cpu.current_instruction.register_1 == RegisterType::C {
-                    self.cpu.mem_dest |= 0xff00;
+        // CPU thread
+        let cpu_thread = thread::spawn(move || {
+            let mut cpu = CPU::new();
+            while running.load(Ordering::Relaxed) {
+                if paused.load(Ordering::Relaxed) {
+                    thread::sleep(Duration::from_millis(10));
+                    continue;
                 }
-                self.cpu
-                    .get_register_value(&self.cpu.current_instruction.register_2)
-            }
 
-            AddressMode::R_D8 => {
-                let result = self.memory.read(pc);
-                self.cpu.emu_cycles(1);
-                self.cpu.increment_pointer(1);
-                result as u16
-            }
-
-            AddressMode::D16 | AddressMode::R_D16 => {
-                let result: u16 = self.memory.read16(self.cpu.regs.pc as usize);
-                // result.set_low(self.memory.read(pc));
-                // result.set_high(self.memory.read(pc + 1));
-                self.cpu.emu_cycles(2);
-                self.cpu.increment_pointer(2);
-                result
-            }
-            AddressMode::R_MR => {
-                let mut addr: u16 = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_2);
-                if self.cpu.current_instruction.register_2 == RegisterType::C {
-                    addr |= 0xFF00;
+                let mut memory_lock = memory.lock().unwrap();
+                if !cpu.cpu_step(&mut memory_lock) {
+                    println!("CPU Stopped");
+                    running.store(false, Ordering::Relaxed);
+                    break;
                 }
-                let res = self.memory.read(addr as usize);
-                self.cpu.emu_cycles(1);
-                res as u16
-            }
-            AddressMode::R_HLI => {
-                let addr = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_2);
-                let res = self.memory.read(addr as usize) as u16;
-                self.cpu.emu_cycles(1);
-                self.cpu.set_register_value(
-                    RegisterType::HL,
-                    self.cpu.get_register_value(&RegisterType::HL) + 1,
-                );
-                res
-            }
-            AddressMode::R_HLD => {
-                let addr = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_2);
-                let res = self.memory.read(addr as usize) as u16;
-                self.cpu.emu_cycles(1);
-                self.cpu.set_register_value(
-                    RegisterType::HL,
-                    self.cpu.get_register_value(&RegisterType::HL) - 1,
-                );
-                res
-            }
-            AddressMode::HLI_R => {
-                self.cpu.mem_dest = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_1)
-                    as usize;
-                self.cpu.destination_is_mem = true;
-                let result = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_2);
-                self.cpu.set_register_value(
-                    RegisterType::HL,
-                    self.cpu.get_register_value(&RegisterType::HL) + 1,
-                );
-                result
-            }
-            AddressMode::HLD_R => {
-                self.cpu.mem_dest = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_1)
-                    as usize;
-                self.cpu.destination_is_mem = true;
-                let result = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_2);
-                self.cpu.set_register_value(
-                    RegisterType::HL,
-                    self.cpu.get_register_value(&RegisterType::HL) - 1,
-                );
-                result
-            }
-            AddressMode::R_A8 => {
-                self.cpu.emu_cycles(1);
-                let res = self.memory.read(self.cpu.regs.pc as usize) as u16;
-                self.cpu.increment_pointer(1);
-                res
-            }
-            AddressMode::A8_R => {
-                self.cpu.mem_dest = self.memory.read(self.cpu.regs.pc as usize) as usize;
-                self.cpu.destination_is_mem = true;
-                self.cpu.emu_cycles(1);
-                self.cpu.increment_pointer(1);
-                let addr = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_2)
-                    as usize;
+                drop(memory_lock);
 
-                self.memory.read(addr) as u16
+                let mut tick_lock = ticks.lock().unwrap();
+                *tick_lock += 1;
             }
-            AddressMode::D8 | AddressMode::HL_SPR => {
-                let res = self.memory.read(self.cpu.regs.pc as usize) as u16;
-                self.cpu.emu_cycles(1);
-                self.cpu.increment_pointer(1);
-                res
-            }
-            AddressMode::A16_R | AddressMode::D16_R => {
-                let low = self.memory.read(pc);
-                let hi = self.memory.read(pc + 1);
-                self.cpu.mem_dest = (((hi as u16) << 8) | (low as u16)) as usize;
-                self.cpu.destination_is_mem = true;
-                self.cpu.increment_pointer(2);
-                self.cpu
-                    .get_register_value(&self.cpu.current_instruction.register_2)
-            }
-            AddressMode::MR_D8 => {
-                let res = self.memory.read(self.cpu.regs.pc as usize) as u16;
-                self.cpu.emu_cycles(1);
-                self.cpu.increment_pointer(1);
-                self.cpu.mem_dest = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_1)
-                    as usize;
-                self.cpu.destination_is_mem = true;
-                res
-            }
-            AddressMode::MR => {
-                self.cpu.mem_dest = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_1)
-                    as usize;
-                self.cpu.destination_is_mem = true;
-                self.cpu.emu_cycles(1);
-                let addr = self
-                    .cpu
-                    .get_register_value(&self.cpu.current_instruction.register_1)
-                    as usize;
+        });
 
-                self.memory.read(addr) as u16
-            }
-            AddressMode::R_A16 => {
-                let low = self.memory.read(pc);
-                let hi = self.memory.read(pc + 1);
+        // UI thread (main thread)
+        let mut ui = Renderer::new();
+        ui.init();
 
-                let addr = ((hi as u16) << 8) | (low as u16);
-                self.cpu.increment_pointer(2);
-                self.cpu.emu_cycles(3);
-                let res = self.memory.read(addr as usize) as u16;
-                res
-            } // _ => 0,
+        while self.running.load(Ordering::Relaxed) {
+            ui.tick();
+            // Here you can add logic to read from memory if needed
+            // let memory_lock = self.memory.lock().unwrap();
+            // ... read from memory_lock ...
+            // drop(memory_lock);
+
+            thread::sleep(Duration::from_millis(10));
+
+            // Check for exit condition (e.g., user input)
+            if ui.exit {
+                self.running.store(false, Ordering::Relaxed);
+            }
         }
+
+        // Wait for CPU thread to finish
+        cpu_thread.join().unwrap();
+
+        println!("Finished app");
     }
 }

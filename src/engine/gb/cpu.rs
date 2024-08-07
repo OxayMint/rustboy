@@ -1,11 +1,8 @@
 use std::process::exit;
 
-use crate::libs::instruction::{self, *};
-
-use super::{
-    memory::{self, Memory},
-    SetBytes,
-};
+use super::memory::Memory;
+use crate::libs::instruction::*;
+use crate::libs::interrupts::InterruptType;
 pub struct CPU {
     pub regs: Registers,
     pub fetched_data: u16,
@@ -17,6 +14,7 @@ pub struct CPU {
     pub current_instruction: Instruction,
     pub int_master_enabled: bool,
     pub ime_enabled: bool,
+    pub interrupt_flags: u8,
 }
 
 impl Registers {
@@ -57,6 +55,7 @@ impl CPU {
             stepping: true,
             int_master_enabled: false,
             ime_enabled: false,
+            interrupt_flags: 0,
             current_instruction: Instruction {
                 ..Default::default()
             },
@@ -70,341 +69,397 @@ impl CPU {
     //     }
     //     return false;
     // }
+    pub fn cpu_step(&mut self, memory: &mut Memory) -> bool {
+        // if self.halted {
+        //     if self.interrupt_flags > 0 {
+        //         self.halted = false;
+        //     }
+        //     return;
+        // }
+        let opcode = memory.read(self.regs.pc as usize);
+        let following_byte = memory.read((self.regs.pc + 1) as usize);
+        let second_byte = memory.read((self.regs.pc + 2) as usize);
+        let inst = Instruction::from_opcode(&opcode);
+        println!(
+            "{:#06X} {} ({:02X} {:02X} {:02X}) A:{:02X} F:{}, BC:{:02X}{:02X}, DE:{:02X}{:02X}, HL:{:02X}{:02X}, SP:{:#06X}, Stack: {:#06X}",//,{:#06X},{:#06X},{:#06X},{:#06X}",
+            self.regs.pc,
+            inst.to_string(),
+            opcode,
+            following_byte,
+            second_byte,
+            self.regs.a,
+            // self.regs.f,
+            self.regs.get_flags_mnemonic(),
+            self.regs.b,
+            self.regs.c,
+            self.regs.d,
+            self.regs.e,
+            self.regs.h,
+            self.regs.l,
+            self.regs.sp,
+            memory.read16(self.regs.sp as usize),
+            // memory.read16((self.regs.sp + 2) as usize),
+            // memory.read16((self.regs.sp + 4) as usize),
+            // memory.read16((self.regs.sp + 6) as usize),
+            // memory.read16((self.regs.sp + 8) as usize)
+        );
+        self.current_instruction = inst;
+        self.destination_is_mem = false;
+        self.increment_pointer(1);
+        self.fetch_data(memory);
 
+        return self.execute(memory);
+    }
     pub fn emu_cycles(&mut self, cycles: u8) {}
-    pub fn execute(&mut self, memory: &mut Memory) {
-        if self.halted {
-            return;
-        }
-        match self.current_instruction.instruction_type {
-            InstructionType::NONE => {
-                println!("just do nothings")
-            } //panic!("Something not right here"),
-            InstructionType::NOP => {
-                println!("NOP");
-            }
-            InstructionType::LD => {
-                if self.destination_is_mem {
-                    if self.current_instruction.register_2 >= RegisterType::AF {
-                        self.emu_cycles(1);
-                        memory.write16(self.mem_dest as usize, self.fetched_data);
-                    } else {
-                        memory.write(self.mem_dest as usize, self.fetched_data as u8);
-                    }
-                    return;
+    pub fn execute(&mut self, memory: &mut Memory) -> bool {
+        if !self.halted {
+            match self.current_instruction.instruction_type {
+                InstructionType::NONE => {
+                    println!("just do nothings")
+                } //panic!("Something not right here"),
+                InstructionType::NOP => {
+                    println!("NOP");
                 }
-                if self.current_instruction.address_mode == AddressMode::HL_SPR {
-                    let hl = self.get_register_value(&self.current_instruction.register_2);
+                InstructionType::LD => {
+                    if self.destination_is_mem {
+                        if self.current_instruction.register_2 >= RegisterType::AF {
+                            self.emu_cycles(1);
+                            memory.write16(self.mem_dest as usize, self.fetched_data);
+                        } else {
+                            memory.write(self.mem_dest as usize, self.fetched_data as u8);
+                        }
+                        self.emu_cycles(1);
 
-                    let hflag: bool = (hl & 0xf) + (self.fetched_data & 0xf) >= 0x10;
-                    let cflag: bool = (hl & 0xff) + (self.fetched_data & 0xff) >= 0x100;
+                        return true;
+                    }
+                    if self.current_instruction.address_mode == AddressMode::HL_SPR {
+                        let hl = self.get_register_value(&self.current_instruction.register_2);
 
-                    self.set_flags(0, 0, hflag as i8, cflag as i8);
+                        let hflag: bool = (hl & 0xf) + (self.fetched_data & 0xf) >= 0x10;
+                        let cflag: bool = (hl & 0xff) + (self.fetched_data & 0xff) >= 0x100;
+
+                        self.set_flags(0, 0, hflag as i8, cflag as i8);
+                        self.set_register_value(
+                            self.current_instruction.register_1.clone(),
+                            self.get_register_value(&self.current_instruction.register_2)
+                                .wrapping_add(self.fetched_data as i8 as u16),
+                        );
+                        return true;
+                    }
                     self.set_register_value(
                         self.current_instruction.register_1.clone(),
-                        self.get_register_value(&self.current_instruction.register_2)
-                            .wrapping_add(self.fetched_data as i8 as u16),
-                    );
-                    return;
+                        self.fetched_data,
+                    )
                 }
-                self.set_register_value(
-                    self.current_instruction.register_1.clone(),
-                    self.fetched_data,
-                )
-            }
-            InstructionType::INC => {
-                let new_val = self.fetched_data.wrapping_add(1);
-                if self.current_instruction.register_1 == RegisterType::SP {
-                    self.regs.sp = new_val
-                } else {
-                    if self.destination_is_mem {
-                        memory.write(self.mem_dest, new_val as u8)
+                InstructionType::INC => {
+                    let new_val = self.fetched_data.wrapping_add(1);
+                    if self.current_instruction.register_1 == RegisterType::SP {
+                        self.regs.sp = new_val
                     } else {
-                        self.set_register_value(
-                            self.current_instruction.register_1.clone(),
-                            new_val,
-                        )
+                        if self.destination_is_mem {
+                            memory.write(self.mem_dest, new_val as u8)
+                        } else {
+                            self.set_register_value(
+                                self.current_instruction.register_1.clone(),
+                                new_val,
+                            )
+                        }
+                        if (self.current_instruction.opcode | 0x3) != 0x3 {
+                            self.set_flags(
+                                (new_val == 0) as i8,
+                                0,
+                                ((self.fetched_data & 0xf) == 0xf) as i8,
+                                -1,
+                            )
+                        }
                     }
-                    if (self.current_instruction.opcode | 0x3) != 0x3 {
-                        self.set_flags(
-                            (new_val == 0) as i8,
-                            0,
-                            ((self.fetched_data & 0xf) == 0xf) as i8,
-                            -1,
-                        )
-                    }
-                }
 
-                // Z  Set if result is 0.
-                // N  0
-                // H Set if overflow from bit 3.
-            }
-            InstructionType::DEC => {
-                let new_val = self.fetched_data.wrapping_sub(1);
-                if self.current_instruction.register_1 == RegisterType::SP {
-                    self.regs.sp = new_val
-                } else {
+                    // Z  Set if result is 0.
+                    // N  0
+                    // H Set if overflow from bit 3.
+                }
+                InstructionType::DEC => {
+                    let new_val = self.fetched_data.wrapping_sub(1);
+                    if self.current_instruction.register_1 == RegisterType::SP {
+                        self.regs.sp = new_val
+                    } else {
+                        if self.destination_is_mem {
+                            memory.write(self.mem_dest, new_val as u8)
+                        } else {
+                            self.set_register_value(
+                                self.current_instruction.register_1.clone(),
+                                new_val,
+                            )
+                        }
+                        if (self.current_instruction.opcode | 0xb) != 0xb {
+                            self.set_flags(
+                                (new_val == 0) as i8,
+                                1,
+                                ((self.fetched_data & 0xf) == 0x0) as i8,
+                                -1,
+                            )
+                        }
+                    }
+                }
+                InstructionType::RLCA => {
+                    let mut val: u8 = self.regs.a;
+                    let c = (val >> 7) & 1; // = 1 or 0. Basically a bool thats says whether the last bit of A is 1
+                    val = (val << 1) | c;
+                    self.regs.a = val;
+                    self.set_flags(0, 0, 0, c as i8);
+                }
+                InstructionType::ADD => {
+                    let reg_val: u32 =
+                        self.get_register_value(&self.current_instruction.register_1) as u32;
+                    let mut val: u32 = reg_val + self.fetched_data as u32;
+                    let is_16_bit = self.current_instruction.register_1 >= RegisterType::AF;
+                    if is_16_bit {
+                        self.emu_cycles(1);
+                    }
+                    if self.current_instruction.register_1 == RegisterType::SP {
+                        val = (reg_val as i16 + self.fetched_data as i16) as u32;
+                    }
+                    let mut z: i8 = ((val & 0xff) == 0) as i8;
+                    let mut h: i8 =
+                        ((reg_val & 0xf) + (self.fetched_data & 0xf) as u32 >= 0x10) as i8;
+                    let mut c: i8 = (reg_val & 0xff) as i8 + (self.fetched_data & 0xff) as i8;
+                    if is_16_bit {
+                        z = -1;
+                        h = ((reg_val & 0xfff) + (self.fetched_data & 0xfff) as u32 >= 0x1000)
+                            as i8;
+                        c = (val >= 0x10000) as i8;
+                    }
+                    if self.current_instruction.register_1 == RegisterType::SP {
+                        z = 0;
+                        h = ((reg_val & 0xf) as i8 + (self.fetched_data & 0xf) as i8 >= 0x10) as i8;
+                        c = ((reg_val & 0xff) as i16 + (self.fetched_data & 0xff) as i16 >= 0x100)
+                            as i8;
+                    }
+                    self.set_register_value(
+                        self.current_instruction.register_1.clone(),
+                        val as u16 & 0xFFFF,
+                    );
+                    self.set_flags(z, 0, h, c);
+                }
+                InstructionType::RRCA => {
+                    let mut val: u8 = self.regs.a;
+                    let c = val & 1; // = 1 or 0. Basically a bool thats says whether the first bit of A is 1
+                    val = (val >> 1) | (c << 7);
+                    self.regs.a = val;
+                    self.set_flags(0, 0, 0, c as i8);
+                }
+                InstructionType::STOP => {
+                    println!("Stop executed");
+                    exit(1);
+                }
+                InstructionType::RLA => {
+                    let old_c = self.flag_c() as u8;
+                    let new_c = self.regs.a >> 7;
+                    self.regs.a = (self.regs.a << 1) | old_c;
+                    self.set_flags(0, 0, 0, new_c as i8);
+                }
+                InstructionType::JR => {
+                    let offset = self.fetched_data as i8;
+                    let new_address = if offset >= 0 {
+                        self.regs.pc.wrapping_add(offset as u16)
+                    } else {
+                        self.regs.pc.wrapping_sub((-offset) as u16)
+                    };
+
+                    // println!(
+                    //     "curr: {}, offset: {}, new addr: {}",
+                    //     self.regs.pc, offset, new_address
+                    // );
+                    self.goto_addr(new_address, memory, false);
+                }
+                InstructionType::RRA => {
+                    let old_c = self.flag_c() as u8;
+                    let new_c = self.regs.a & 1;
+                    self.regs.a = (self.regs.a >> 1) | (old_c << 7);
+                    self.set_flags(0, 0, 0, new_c as i8);
+                }
+                InstructionType::DAA => {
+                    let mut a = self.regs.a;
+                    let mut adjust = 0;
+
+                    if self.flag_h() || (a & 0xF) > 9 {
+                        adjust |= 0x06;
+                    }
+                    if self.flag_c() || (a >> 4) > 9 {
+                        adjust |= 0x60;
+                    }
+
+                    if self.flag_n() {
+                        a = a.wrapping_sub(adjust);
+                    } else {
+                        a = a.wrapping_add(adjust);
+                    }
+                    self.regs.a = a;
+                    self.set_flags((a == 0) as i8, -1, 0, (adjust >= 0x60) as i8);
+                }
+                InstructionType::CPL => {
+                    self.regs.a = !self.regs.a;
+                    self.set_flags(-1, 1, 1, -1)
+                }
+                InstructionType::SCF => self.set_flags(-1, 1, 1, 1),
+                InstructionType::CCF => self.set_flags(-1, 0, 0, !self.flag_c() as i8),
+                InstructionType::HALT => self.halted = true,
+                InstructionType::ADC => {
+                    let d = self.fetched_data;
+                    let a = self.regs.a as u16;
+                    let c = self.flag_c() as u16;
+
+                    self.regs.a = ((d + a + c) & 0xff) as u8;
+
+                    self.set_flags(
+                        (self.regs.a == 0) as i8,
+                        0,
+                        ((a & 0xf + d & 0xf + c) > 0xf) as i8,
+                        (a + d + c > 0xff) as i8,
+                    )
+                }
+                InstructionType::SUB => {
+                    let val = self.regs.a - self.fetched_data as u8;
+
+                    let z = (val == 0) as i8;
+                    let h = ((self.regs.a as i8 & 0xF) - (self.fetched_data as i8 & 0xf) > 0) as i8;
+                    let c = (self.regs.a < self.fetched_data as u8) as i8;
+                    self.regs.a = val;
+                    self.set_flags(z, 1, h, c)
+                }
+                InstructionType::SBC => {
+                    let carry = if self.flag_c() { 1 } else { 0 };
+                    let a = self.regs.a;
+                    let val = (self.fetched_data as u8).wrapping_add(carry);
+                    let result = a.wrapping_sub(val);
+                    let h = (a & 0xF) < (val & 0xF);
+                    let c = a < val;
+                    self.regs.a = result;
+                    self.set_flags((result == 0) as i8, 1, h as i8, c as i8);
+                }
+                InstructionType::AND => {
+                    self.set_flags((self.regs.a as u16 & self.fetched_data == 0) as i8, 0, 1, 0)
+                }
+                InstructionType::XOR => {
+                    self.regs.a ^= self.fetched_data as u8;
+                    self.set_flags((self.regs.a == 0) as i8, 0, 0, 0)
+                }
+                InstructionType::OR => {
+                    self.regs.a |= self.fetched_data as u8;
+                    self.set_flags((self.regs.a == 0) as i8, 0, 0, 0)
+                }
+                InstructionType::CP => {
+                    let a = self.regs.a as i32;
+                    let c = self.fetched_data as i32;
+                    let n = a.wrapping_sub(c);
+                    self.set_flags(
+                        (n == 0) as i8,
+                        1,
+                        ((self.regs.a as i8 & 0x0F) - (self.fetched_data as i8 & 0x0F) < 0) as i8,
+                        (n < 0) as i8,
+                    );
+                    self.set_flags(
+                        (a == c) as i8,
+                        1,
+                        ((a & 0xF) < (c & 0xF)) as i8,
+                        (a > c) as i8,
+                    );
+                }
+                InstructionType::POP => {
+                    let val = memory.stack_pop16(&mut self.regs.sp);
+                    self.emu_cycles(2);
+                    if self.current_instruction.register_1 == RegisterType::AF {
+                        self.set_register_value(RegisterType::AF, val & 0xFFF0);
+                    } else {
+                        let reg = self.current_instruction.register_1.clone();
+
+                        self.set_register_value(reg, val);
+                    }
+                }
+                InstructionType::JP => self.goto_addr(self.fetched_data, memory, false),
+                InstructionType::PUSH => {
+                    memory.stack_push16(&mut self.regs.sp, self.fetched_data);
+                    self.emu_cycles(2);
+                }
+                InstructionType::RET => {
+                    if self.check_condition() {
+                        let addr = memory.stack_pop16(&mut self.regs.sp);
+                        // println!("returnning to {:#X}", addr);
+                        self.regs.pc = addr;
+                        self.emu_cycles(3)
+                    }
+                }
+                InstructionType::CB => self.run_cb(memory),
+                InstructionType::CALL => self.goto_addr(self.fetched_data, memory, true),
+                InstructionType::RETI => {
+                    self.int_master_enabled = true;
+                    if self.current_instruction.condition != ConditionType::NONE {
+                        let addr = memory.stack_pop16(&mut self.regs.sp);
+                        self.regs.pc = addr;
+                        self.emu_cycles(3)
+                    }
+                }
+                InstructionType::LDH => {
+                    // if self.current_instruction.register_1 == RegisterType::A {
+                    //     self.set_register_value(
+                    //         self.current_instruction.register_1.clone(),
+                    //         memory.read(self.fetched_data as usize) as u16,
+                    //     );
+                    // } else {
+                    //     memory.write(self.mem_dest, self.fetched_data as u8);
+                    // }
+
+                    let addr = self.mem_dest | 0xFF00;
                     if self.destination_is_mem {
-                        memory.write(self.mem_dest, new_val as u8)
+                        memory.write(addr, self.fetched_data as u8);
                     } else {
                         self.set_register_value(
                             self.current_instruction.register_1.clone(),
-                            new_val,
-                        )
+                            addr as u16,
+                        );
                     }
-                    if (self.current_instruction.opcode | 0xb) != 0xb {
-                        self.set_flags(
-                            (new_val == 0) as i8,
-                            1,
-                            ((self.fetched_data & 0xf) == 0x0) as i8,
-                            -1,
-                        )
-                    }
-                }
-            }
-            InstructionType::RLCA => {
-                let mut val: u8 = self.regs.a;
-                let c = (val >> 7) & 1; // = 1 or 0. Basically a bool thats says whether the last bit of A is 1
-                val = (val << 1) | c;
-                self.regs.a = val;
-                self.set_flags(0, 0, 0, c as i8);
-            }
-            InstructionType::ADD => {
-                let reg_val: u32 =
-                    self.get_register_value(&self.current_instruction.register_1) as u32;
-                let mut val: u32 = reg_val + self.fetched_data as u32;
-                let is_16_bit = self.current_instruction.register_1 >= RegisterType::AF;
-                if is_16_bit {
                     self.emu_cycles(1);
                 }
-                if self.current_instruction.register_1 == RegisterType::SP {
-                    val = (reg_val as i16 + self.fetched_data as i16) as u32;
+                InstructionType::JPHL => todo!(),
+                InstructionType::DI => {
+                    self.int_master_enabled = false;
                 }
-                let mut z: i8 = ((val & 0xff) == 0) as i8;
-                let mut h: i8 = ((reg_val & 0xf) + (self.fetched_data & 0xf) as u32 >= 0x10) as i8;
-                let mut c: i8 = (reg_val & 0xff) as i8 + (self.fetched_data & 0xff) as i8;
-                if is_16_bit {
-                    z = -1;
-                    h = ((reg_val & 0xfff) + (self.fetched_data & 0xfff) as u32 >= 0x1000) as i8;
-                    c = (val >= 0x10000) as i8;
+                InstructionType::EI => self.ime_enabled = true,
+                InstructionType::RST => {
+                    self.goto_addr(self.current_instruction.rst_vec as u16, memory, true);
                 }
-                if self.current_instruction.register_1 == RegisterType::SP {
-                    z = 0;
-                    h = ((reg_val & 0xf) as i8 + (self.fetched_data & 0xf) as i8 >= 0x10) as i8;
-                    c = ((reg_val & 0xff) as i16 + (self.fetched_data & 0xff) as i16 >= 0x100)
-                        as i8;
-                }
-                self.set_register_value(
-                    self.current_instruction.register_1.clone(),
-                    val as u16 & 0xFFFF,
-                );
-                self.set_flags(z, 0, h, c);
+                InstructionType::ERR => todo!(),
+                // InstructionType::RLC => todo!(),
+                // InstructionType::RRC => todo!(),
+                // InstructionType::RL => todo!(),
+                // InstructionType::RR => todo!(),
+                // InstructionType::SLA => todo!(),
+                // InstructionType::SRA => todo!(),
+                // InstructionType::SWAP => todo!(),
+                // InstructionType::SRL => todo!(),
+                // InstructionType::BIT => todo!(),
+                // InstructionType::RES => todo!(),
+                // InstructionType::SET => todo!(),
             }
-            InstructionType::RRCA => {
-                let mut val: u8 = self.regs.a;
-                let c = val & 1; // = 1 or 0. Basically a bool thats says whether the first bit of A is 1
-                val = (val >> 1) | (c << 7);
-                self.regs.a = val;
-                self.set_flags(0, 0, 0, c as i8);
+        } else {
+            self.emu_cycles(1);
+            if self.interrupt_flags > 0 {
+                self.halted = false;
             }
-            InstructionType::STOP => {
-                println!("Stop executed");
-                exit(1);
-            }
-            InstructionType::RLA => {
-                let old_c = self.flag_c() as u8;
-                let new_c = self.regs.a >> 7;
-                self.regs.a = (self.regs.a << 1) | old_c;
-                self.set_flags(0, 0, 0, new_c as i8);
-            }
-            InstructionType::JR => {
-                let offset = self.fetched_data as i8;
-                let new_address = if offset >= 0 {
-                    self.regs.pc.wrapping_add(offset as u16)
-                } else {
-                    self.regs.pc.wrapping_sub((-offset) as u16)
-                };
-
-                // println!(
-                //     "curr: {}, offset: {}, new addr: {}",
-                //     self.regs.pc, offset, new_address
-                // );
-                self.goto_addr(new_address, memory, false);
-            }
-            InstructionType::RRA => {
-                let old_c = self.flag_c() as u8;
-                let new_c = self.regs.a & 1;
-                self.regs.a = (self.regs.a >> 1) | (old_c << 7);
-                self.set_flags(0, 0, 0, new_c as i8);
-            }
-            InstructionType::DAA => {
-                let mut a = self.regs.a;
-                let mut adjust = 0;
-
-                if self.flag_h() || (a & 0xF) > 9 {
-                    adjust |= 0x06;
-                }
-                if self.flag_c() || (a >> 4) > 9 {
-                    adjust |= 0x60;
-                }
-
-                if self.flag_n() {
-                    a = a.wrapping_sub(adjust);
-                } else {
-                    a = a.wrapping_add(adjust);
-                }
-                self.regs.a = a;
-                self.set_flags((a == 0) as i8, -1, 0, (adjust >= 0x60) as i8);
-            }
-            InstructionType::CPL => {
-                self.regs.a = !self.regs.a;
-                self.set_flags(-1, 1, 1, -1)
-            }
-            InstructionType::SCF => self.set_flags(-1, 1, 1, 1),
-            InstructionType::CCF => self.set_flags(-1, 0, 0, !self.flag_c() as i8),
-            InstructionType::HALT => self.halted = true,
-            InstructionType::ADC => {
-                let d = self.fetched_data;
-                let a = self.regs.a as u16;
-                let c = self.flag_c() as u16;
-
-                self.regs.a = ((d + a + c) & 0xff) as u8;
-
-                self.set_flags(
-                    (self.regs.a == 0) as i8,
-                    0,
-                    ((a & 0xf + d & 0xf + c) > 0xf) as i8,
-                    (a + d + c > 0xff) as i8,
-                )
-            }
-            InstructionType::SUB => {
-                let val = self.regs.a - self.fetched_data as u8;
-
-                let z = (val == 0) as i8;
-                let h = ((self.regs.a as i8 & 0xF) - (self.fetched_data as i8 & 0xf) > 0) as i8;
-                let c = (self.regs.a < self.fetched_data as u8) as i8;
-                self.regs.a = val;
-                self.set_flags(z, 1, h, c)
-            }
-            InstructionType::SBC => {
-                let carry = if self.flag_c() { 1 } else { 0 };
-                let a = self.regs.a;
-                let val = (self.fetched_data as u8).wrapping_add(carry);
-                let result = a.wrapping_sub(val);
-                let h = (a & 0xF) < (val & 0xF);
-                let c = a < val;
-                self.regs.a = result;
-                self.set_flags((result == 0) as i8, 1, h as i8, c as i8);
-            }
-            InstructionType::AND => {
-                self.set_flags((self.regs.a as u16 & self.fetched_data == 0) as i8, 0, 1, 0)
-            }
-            InstructionType::XOR => {
-                self.regs.a ^= self.fetched_data as u8;
-                self.set_flags((self.regs.a == 0) as i8, 0, 0, 0)
-            }
-            InstructionType::OR => {
-                self.regs.a |= self.fetched_data as u8;
-                self.set_flags((self.regs.a == 0) as i8, 0, 0, 0)
-            }
-            InstructionType::CP => {
-                let a = self.regs.a as i32;
-                let c = self.fetched_data as i32;
-                let n = a.wrapping_sub(c);
-                self.set_flags(
-                    (n == 0) as i8,
-                    1,
-                    ((self.regs.a as i8 & 0x0F) - (self.fetched_data as i8 & 0x0F) < 0) as i8,
-                    (n < 0) as i8,
-                );
-                self.set_flags(
-                    (a == c) as i8,
-                    1,
-                    ((a & 0xF) < (c & 0xF)) as i8,
-                    (a > c) as i8,
-                );
-            }
-            InstructionType::POP => {
-                let val = memory.stack_pop16(&mut self.regs.sp);
-                self.emu_cycles(2);
-                if self.current_instruction.register_1 == RegisterType::AF {
-                    self.set_register_value(RegisterType::AF, val & 0xFFF0);
-                } else {
-                    let reg = self.current_instruction.register_1.clone();
-
-                    self.set_register_value(reg, val);
-                }
-            }
-            InstructionType::JP => self.goto_addr(self.fetched_data, memory, false),
-            InstructionType::PUSH => {
-                memory.stack_push16(&mut self.regs.sp, self.fetched_data);
-                self.emu_cycles(2);
-            }
-            InstructionType::RET => {
-                if self.check_condition() {
-                    let addr = memory.stack_pop16(&mut self.regs.sp);
-                    // println!("returnning to {:#X}", addr);
-                    self.regs.pc = addr;
-                    self.emu_cycles(3)
-                }
-            }
-            InstructionType::CB => self.run_cb(memory),
-            InstructionType::CALL => self.goto_addr(self.fetched_data, memory, true),
-            InstructionType::RETI => {
-                self.int_master_enabled = true;
-                if self.current_instruction.condition != ConditionType::NONE {
-                    let addr = memory.stack_pop16(&mut self.regs.sp);
-                    self.regs.pc = addr;
-                    self.emu_cycles(3)
-                }
-            }
-            InstructionType::LDH => {
-                if self.current_instruction.register_1 == RegisterType::A {
-                    self.set_register_value(
-                        RegisterType::A,
-                        memory.read16((0xFF00 | self.fetched_data) as usize),
-                    );
-                } else {
-                    memory.write(self.mem_dest, self.fetched_data as u8);
-                }
-
-                // let addr = self.mem_dest | 0xFF00;
-                // if self.destination_is_mem {
-                //     memory.write(addr, self.fetched_data as u8);
-                // } else {
-                //     self.set_register_value(
-                //         self.current_instruction.register_1.clone(),
-                //         addr as u16,
-                //     );
-                // }
-                self.emu_cycles(1);
-            }
-            InstructionType::JPHL => todo!(),
-            InstructionType::DI => {
-                self.int_master_enabled = false;
-            }
-            InstructionType::EI => self.ime_enabled = true,
-            InstructionType::RST => {
-                self.goto_addr(self.current_instruction.rst_vec as u16, memory, true);
-            }
-            InstructionType::ERR => todo!(),
-            // InstructionType::RLC => todo!(),
-            // InstructionType::RRC => todo!(),
-            // InstructionType::RL => todo!(),
-            // InstructionType::RR => todo!(),
-            // InstructionType::SLA => todo!(),
-            // InstructionType::SRA => todo!(),
-            // InstructionType::SWAP => todo!(),
-            // InstructionType::SRL => todo!(),
-            // InstructionType::BIT => todo!(),
-            // InstructionType::RES => todo!(),
-            // InstructionType::SET => todo!(),
+        }
+        if self.int_master_enabled {
+            self.handle_interrupts(memory);
+            self.ime_enabled = false;
+        }
+        if self.ime_enabled {
+            self.int_master_enabled = true;
         }
         // self.emu_cycles(if self.check_condition() {
         //     self.current_instruction.cycles
         // } else {
         //     self.current_instruction.no_action_cycles
         // });
+        return true;
     }
 
     pub fn increment_pointer(&mut self, by: u16) {
@@ -568,7 +623,7 @@ impl CPU {
     }
 
     fn run_cb(&mut self, memory: &mut Memory) {
-        println!("RUNNING CB OP");
+        // println!("RUNNING CB OP");
         let operation = self.fetched_data;
         let register = RegisterType::decode(operation as usize & 0b111);
         let bit = (operation >> 3) & 0b111;
@@ -691,6 +746,177 @@ impl CPU {
             _ => {
                 panic!("ERROR: INVALID CB: {operation}");
             }
+        }
+    }
+
+    pub fn request_interrup(&self, t: InterruptType) {}
+
+    pub fn handle_interrupts(&mut self, memory: &mut Memory) {
+        if self.int_check(memory, 0x40, InterruptType::VBLANK) {
+        } else if self.int_check(memory, 0x48, InterruptType::LCD_STAT) {
+        } else if self.int_check(memory, 0x50, InterruptType::TIMER) {
+        } else if self.int_check(memory, 0x58, InterruptType::SERIAL) {
+        } else if self.int_check(memory, 0x60, InterruptType::JOYPAD) {
+        }
+    }
+    fn int_check(&mut self, memory: &mut Memory, addr: u16, int_type: InterruptType) -> bool {
+        if (self.interrupt_flags & int_type.clone() as u8) > 0
+            && (memory.get_ie_register() & int_type.clone() as u8) > 0
+        {
+            self.int_handle(memory, 0x40);
+            self.interrupt_flags &= !(int_type as u8);
+            self.halted = false;
+            self.int_master_enabled = false;
+            return true;
+        }
+        return false;
+    }
+    fn int_handle(&mut self, memory: &mut Memory, addr: u16) {
+        memory.stack_push16(&mut self.regs.sp, self.regs.pc);
+        self.regs.pc = addr;
+    }
+
+    pub fn fetch_data(&mut self, memory: &mut Memory) {
+        let pc = self.regs.pc as usize;
+        self.fetched_data = match self.current_instruction.address_mode {
+            AddressMode::IMPLIED | AddressMode::R => {
+                self.get_register_value(&self.current_instruction.register_1)
+            }
+
+            AddressMode::R_R => self.get_register_value(&self.current_instruction.register_2),
+            AddressMode::MR_R => {
+                self.mem_dest =
+                    self.get_register_value(&self.current_instruction.register_1) as usize;
+                self.destination_is_mem = true;
+                if self.current_instruction.register_1 == RegisterType::C {
+                    self.mem_dest |= 0xff00;
+                }
+                self.get_register_value(&self.current_instruction.register_2)
+            }
+
+            AddressMode::R_D8 => {
+                let result = memory.read(pc);
+                self.emu_cycles(1);
+                self.increment_pointer(1);
+                result as u16
+            }
+
+            AddressMode::D16 | AddressMode::R_D16 => {
+                let result: u16 = memory.read16(self.regs.pc as usize);
+                // result.set_low(memory.read(pc));
+                // result.set_high(memory.read(pc + 1));
+                self.emu_cycles(2);
+                self.increment_pointer(2);
+                result
+            }
+            AddressMode::R_MR => {
+                let mut addr: u16 = self.get_register_value(&self.current_instruction.register_2);
+                if self.current_instruction.register_2 == RegisterType::C {
+                    addr |= 0xFF00;
+                }
+                let res = memory.read(addr as usize);
+                self.emu_cycles(1);
+                res as u16
+            }
+            AddressMode::R_HLI => {
+                let addr = self.get_register_value(&self.current_instruction.register_2);
+                let res = memory.read(addr as usize) as u16;
+                self.emu_cycles(1);
+                self.set_register_value(
+                    RegisterType::HL,
+                    self.get_register_value(&RegisterType::HL) + 1,
+                );
+                res
+            }
+            AddressMode::R_HLD => {
+                let addr = self.get_register_value(&self.current_instruction.register_2);
+                let res = memory.read(addr as usize) as u16;
+                self.emu_cycles(1);
+                self.set_register_value(
+                    RegisterType::HL,
+                    self.get_register_value(&RegisterType::HL) - 1,
+                );
+                res
+            }
+            AddressMode::HLI_R => {
+                self.mem_dest =
+                    self.get_register_value(&self.current_instruction.register_1) as usize;
+                self.destination_is_mem = true;
+                let result = self.get_register_value(&self.current_instruction.register_2);
+                self.set_register_value(
+                    RegisterType::HL,
+                    self.get_register_value(&RegisterType::HL) + 1,
+                );
+                result
+            }
+            AddressMode::HLD_R => {
+                self.mem_dest =
+                    self.get_register_value(&self.current_instruction.register_1) as usize;
+                self.destination_is_mem = true;
+                let result = self.get_register_value(&self.current_instruction.register_2);
+                self.set_register_value(
+                    RegisterType::HL,
+                    self.get_register_value(&RegisterType::HL) - 1,
+                );
+                result
+            }
+            AddressMode::R_A8 => {
+                self.emu_cycles(1);
+                let res = memory.read(self.regs.pc as usize) as u16;
+                self.increment_pointer(1);
+                res
+            }
+            AddressMode::A8_R => {
+                self.mem_dest = memory.read(self.regs.pc as usize) as usize;
+                self.destination_is_mem = true;
+                self.emu_cycles(1);
+                self.increment_pointer(1);
+                let addr = self.get_register_value(&self.current_instruction.register_2) as usize;
+
+                memory.read(addr) as u16
+            }
+            AddressMode::D8 | AddressMode::HL_SPR => {
+                let res = memory.read(self.regs.pc as usize) as u16;
+                self.emu_cycles(1);
+                self.increment_pointer(1);
+                res
+            }
+            AddressMode::A16_R | AddressMode::D16_R => {
+                let low = memory.read(pc);
+                let hi = memory.read(pc + 1);
+                self.mem_dest = (((hi as u16) << 8) | (low as u16)) as usize;
+                self.destination_is_mem = true;
+                self.increment_pointer(2);
+                self.get_register_value(&self.current_instruction.register_2)
+            }
+            AddressMode::MR_D8 => {
+                let res = memory.read(self.regs.pc as usize) as u16;
+                self.emu_cycles(1);
+                self.increment_pointer(1);
+                self.mem_dest =
+                    self.get_register_value(&self.current_instruction.register_1) as usize;
+                self.destination_is_mem = true;
+                res
+            }
+            AddressMode::MR => {
+                self.mem_dest =
+                    self.get_register_value(&self.current_instruction.register_1) as usize;
+                self.destination_is_mem = true;
+                self.emu_cycles(1);
+                let addr = self.get_register_value(&self.current_instruction.register_1) as usize;
+
+                memory.read(addr) as u16
+            }
+            AddressMode::R_A16 => {
+                let low = memory.read(pc);
+                let hi = memory.read(pc + 1);
+
+                let addr = ((hi as u16) << 8) | (low as u16);
+                self.increment_pointer(2);
+                self.emu_cycles(3);
+                let res = memory.read(addr as usize) as u16;
+                res
+            } // _ => 0,
         }
     }
 }

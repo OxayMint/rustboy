@@ -534,63 +534,45 @@ impl Instruction {
                 instruction_type: InstructionType::CCF,
                 ..Default::default()
             },
-            0x40..=0x75 => {
-                let src = match code & 0x07 {
-                    0 => RegisterType::B,
-                    1 => RegisterType::C,
-                    2 => RegisterType::D,
-                    3 => RegisterType::E,
-                    4 => RegisterType::H,
-                    5 => RegisterType::L,
-                    6 => RegisterType::HL,
-                    7 => RegisterType::A,
-                    _ => unreachable!(),
-                };
-                let dst = match (code & 0x38) >> 3 {
-                    0 => RegisterType::B,
-                    1 => RegisterType::C,
-                    2 => RegisterType::D,
-                    3 => RegisterType::E,
-                    4 => RegisterType::H,
-                    5 => RegisterType::L,
-                    6 => RegisterType::HL,
-                    7 => RegisterType::A,
-                    _ => unreachable!(),
-                };
-                Instruction {
-                    instruction_type: InstructionType::LD,
-                    address_mode: if src == RegisterType::HL || dst == RegisterType::HL {
-                        AddressMode::R_MR
-                    } else {
-                        AddressMode::R_R
-                    },
-                    register_1: dst,
-                    register_2: src,
-                    ..Default::default()
-                }
-            }
-            0x76 => Instruction {
-                instruction_type: InstructionType::HALT,
+            0x76 => {
+                return Instruction {
+                    instruction_type: InstructionType::HALT,
 
-                ..Default::default()
-            },
-            0x77..=0x7F => {
-                let src = match code & 0x07 {
-                    0 => RegisterType::B,
-                    1 => RegisterType::C,
-                    2 => RegisterType::D,
-                    3 => RegisterType::E,
-                    4 => RegisterType::H,
-                    5 => RegisterType::L,
-                    6 => RegisterType::HL,
-                    7 => RegisterType::A,
-                    _ => unreachable!(),
+                    ..Default::default()
+                };
+            }
+            0x40..=0x7F => {
+                let regs = [
+                    RegisterType::B,  //4  with r:off                                    0
+                    RegisterType::C,  //4 with r:on  1
+                    RegisterType::D,  //5  with r:off                                    2
+                    RegisterType::E,  //5 with r:on  3
+                    RegisterType::H,  //6  with r:off                                    4
+                    RegisterType::L,  //6 with r:on  5
+                    RegisterType::HL, //7 with r:off                                     6
+                    RegisterType::A,  //7 with r:on  7
+                ];
+
+                let left_digit = code >> 4;
+                let right_digit = code & 0xf;
+                let is_right_side = (right_digit >= 8) as u8;
+
+                let reg_1_idx = (left_digit - 4) * 2 + is_right_side;
+                let reg_2_idx = right_digit - (8 * is_right_side);
+                let reg1 = &regs[reg_1_idx as usize];
+                let reg2 = &regs[reg_2_idx as usize];
+                let addr_mode = if *reg1 == RegisterType::HL {
+                    AddressMode::MR_R
+                } else if *reg2 == RegisterType::HL {
+                    AddressMode::R_MR
+                } else {
+                    AddressMode::R_R
                 };
                 Instruction {
                     instruction_type: InstructionType::LD,
-                    address_mode: AddressMode::MR_R,
-                    register_1: RegisterType::HL,
-                    register_2: src,
+                    address_mode: addr_mode,
+                    register_1: reg1.clone(),
+                    register_2: reg2.clone(),
                     ..Default::default()
                 }
             }
@@ -701,7 +683,7 @@ impl Instruction {
             },
             0xA8..=0xAF => Instruction {
                 instruction_type: InstructionType::XOR,
-                address_mode: if code & 0x07 == 0x06 {
+                address_mode: if (code & 0x07) == 0x06 {
                     AddressMode::R_MR
                 } else {
                     AddressMode::R_R
@@ -1108,7 +1090,7 @@ impl Instruction {
                 ..Default::default()
             },
         };
-        inst.length = Instruction::length(&inst);
+        // inst.length = Instruction::length(&inst);
         inst.opcode = *code;
         return inst;
     }
@@ -1130,28 +1112,29 @@ impl Instruction {
             self.no_action_cycles.to_string()
         );
     }
-    pub fn length(inst: &Instruction) -> u8 {
-        match inst.address_mode {
-            AddressMode::IMPLIED => 1,
-            AddressMode::R | AddressMode::MR => 1,
-            AddressMode::R_R | AddressMode::R_MR | AddressMode::MR_R => 1,
-            AddressMode::R_D8
-            | AddressMode::MR_D8
-            | AddressMode::A8_R
-            | AddressMode::R_A8
-            | AddressMode::HL_SPR
-            | AddressMode::D8
-            | AddressMode::R_HLI
-            | AddressMode::R_HLD
-            | AddressMode::HLI_R
-            | AddressMode::HLD_R => 2,
-            AddressMode::R_D16
-            | AddressMode::R_A16
-            | AddressMode::D16_R
-            | AddressMode::A16_R
-            | AddressMode::D16 => 3,
-        }
-    }
+    /* pub fn length(inst: &Instruction) -> u8 {
+         match inst.address_mode {
+             AddressMode::IMPLIED => 1,
+             AddressMode::R | AddressMode::MR => 1,
+             AddressMode::R_R | AddressMode::R_MR | AddressMode::MR_R => 1,
+             AddressMode::R_D8
+             | AddressMode::MR_D8
+             | AddressMode::A8_R
+             | AddressMode::R_A8
+             | AddressMode::HL_SPR
+             | AddressMode::D8
+             | AddressMode::R_HLI
+             | AddressMode::R_HLD
+             | AddressMode::HLI_R
+             | AddressMode::HLD_R => 2,
+             AddressMode::R_D16
+             | AddressMode::R_A16
+             | AddressMode::D16_R
+             | AddressMode::A16_R
+             | AddressMode::D16 => 3,
+         }
+     }
+    */
     // pub fn get_cycles_count(inst: &Instruction) -> (u8, Option<u8>) {
     //     match (&inst.instruction_type, &inst.address_mode, &inst.condition) {
     //         // Conditional instructions

@@ -6,6 +6,8 @@ pub mod cpu;
 pub mod gameboy;
 #[path = "engine/gb/instruction.rs"]
 pub mod instruction;
+#[path = "engine/gb/interrupts.rs"]
+pub mod interrupts;
 #[path = "engine/gb/memory.rs"]
 pub mod memory;
 #[path = "engine/gb/rendering.rs"]

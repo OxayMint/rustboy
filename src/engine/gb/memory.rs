@@ -42,7 +42,8 @@ impl Memory {
             }
             0x8000..0xA000 => {
                 //Char/BG
-                todo!("OAM not implemented yet")
+                // todo!("OAM not implemented yet")
+                return 0;
             }
             0xA000..0xC000 => {
                 //Ext ram
