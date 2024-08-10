@@ -1,3 +1,6 @@
+use std::ops::{BitOr, BitOrAssign};
+
+#[derive(Copy, Clone, Debug)]
 pub enum InterruptType {
     VBLANK = 1,
     LCD_STAT = 2,
@@ -6,14 +9,23 @@ pub enum InterruptType {
     JOYPAD = 16,
 }
 
-impl Clone for InterruptType {
-    fn clone(&self) -> InterruptType {
-        match self {
-            InterruptType::VBLANK => InterruptType::VBLANK,
-            InterruptType::LCD_STAT => InterruptType::LCD_STAT,
-            InterruptType::TIMER => InterruptType::LCD_STAT,
-            InterruptType::SERIAL => InterruptType::SERIAL,
-            InterruptType::JOYPAD => InterruptType::JOYPAD,
-        }
+impl BitOr<u8> for InterruptType {
+    type Output = u8;
+
+    fn bitor(self, rhs: u8) -> Self::Output {
+        (self as u8) | rhs
+    }
+}
+
+impl BitOr<InterruptType> for u8 {
+    type Output = u8;
+
+    fn bitor(self, rhs: InterruptType) -> Self::Output {
+        self | (rhs as u8)
+    }
+}
+impl BitOrAssign<InterruptType> for u8 {
+    fn bitor_assign(&mut self, rhs: InterruptType) {
+        *self |= rhs as u8;
     }
 }

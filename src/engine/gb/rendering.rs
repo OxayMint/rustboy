@@ -1,16 +1,16 @@
-use raylib::{color::Color, prelude::RaylibDraw};
+use raylib::{color::Color, ffi::CloseWindow, prelude::RaylibDraw};
 
 // use sdl2::{self, Error};
 pub struct Renderer {
     pub tick: u32,
-    pub exit: bool,
+    pub exited: bool,
 }
 
 impl Renderer {
     pub fn new() -> Self {
         Renderer {
             tick: 0,
-            exit: false,
+            exited: false,
         }
     }
     pub fn init(&mut self) {
@@ -22,8 +22,12 @@ impl Renderer {
             d.clear_background(Color::WHITE);
             d.draw_text("Hello, world!", 12, 12, 20, Color::BLACK);
         }
-        self.exit = true;
+        // rl.
+        self.exited = true;
     }
     pub fn handle_events(&mut self) {}
     pub fn tick(&mut self) {}
+    pub fn exit(&mut self) {
+        unsafe { CloseWindow() };
+    }
 }

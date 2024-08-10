@@ -40,9 +40,9 @@ pub enum AddressMode {
     R_A16,
 }
 
-#[derive(PartialEq, PartialOrd, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Clone, Debug)]
 pub enum RegisterType {
-    NONE,
+    N,
     A,
     F,
     B,
@@ -93,7 +93,7 @@ pub enum InstructionType {
     CALL,
     RETI,
     LDH,
-    JPHL,
+    // JPHL,
     DI,
     EI,
     RST,
@@ -114,7 +114,7 @@ pub enum InstructionType {
 impl RegisterType {
     pub fn decode(reg: usize) -> RegisterType {
         if reg > 0b111 {
-            RegisterType::NONE
+            RegisterType::N
         } else {
             [
                 RegisterType::B,
@@ -128,6 +128,11 @@ impl RegisterType {
             ][reg]
                 .clone()
         }
+    }
+}
+impl fmt::Display for ConditionType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 impl fmt::Display for RegisterType {
@@ -160,6 +165,12 @@ impl Instruction {
         let mut inst = match code {
             0x00 => Instruction {
                 instruction_type: InstructionType::NOP,
+                ..Default::default()
+            },
+            0xE8 => Instruction {
+                instruction_type: InstructionType::ADD,
+                address_mode: AddressMode::R_D8,
+                register_1: RegisterType::SP,
                 ..Default::default()
             },
             0x01 => Instruction {
@@ -206,7 +217,8 @@ impl Instruction {
             0x08 => Instruction {
                 instruction_type: InstructionType::LD,
                 address_mode: AddressMode::A16_R,
-                register_1: RegisterType::SP,
+                register_1: RegisterType::N,
+                register_2: RegisterType::SP,
                 ..Default::default()
             },
             0x09 => Instruction {
@@ -920,7 +932,8 @@ impl Instruction {
             0xE0 => Instruction {
                 instruction_type: InstructionType::LDH,
                 address_mode: AddressMode::A8_R,
-                register_1: RegisterType::A,
+                register_1: RegisterType::N,
+                register_2: RegisterType::A,
                 ..Default::default()
             },
             0xE1 => Instruction {
@@ -961,12 +974,6 @@ impl Instruction {
                 rst_vec: 0x20,
                 ..Default::default()
             },
-            0xE8 => Instruction {
-                instruction_type: InstructionType::ADD,
-                address_mode: AddressMode::R_D8,
-                register_1: RegisterType::SP,
-                ..Default::default()
-            },
             0xE9 => Instruction {
                 instruction_type: InstructionType::JP,
                 address_mode: AddressMode::R,
@@ -976,7 +983,8 @@ impl Instruction {
             0xEA => Instruction {
                 instruction_type: InstructionType::LD,
                 address_mode: AddressMode::A16_R,
-                register_1: RegisterType::A,
+                register_1: RegisterType::N,
+                register_2: RegisterType::A,
                 ..Default::default()
             },
             0xEB => Instruction {
@@ -1101,15 +1109,36 @@ impl Instruction {
     //     }
     // }
     pub fn to_string(&self) -> String {
+        // let addr1 = match self.address_mode {
+        //     AddressMode::R_D16 | AddressMode::R_R | AddressMode::R => todo!(),
+        //     AddressMode::R_D8
+        //     | AddressMode::R_MR
+        //     | AddressMode::R_HLI
+        //     | AddressMode::R_HLD
+        //     | AddressMode::R_A8
+        //     | AddressMode::R_A16 => self.register_1,
+
+        //     AddressMode::MR_R |
+        //     AddressMode::MR_D8 |
+        //     AddressMode::MR => self
+        //     AddressMode::HLI_R => todo!(),
+        //     AddressMode::HLD_R => todo!(),
+        //     AddressMode::A8_R => todo!(),
+        //     AddressMode::HL_SPR => todo!(),
+        //     AddressMode::D16 => todo!(),
+        //     AddressMode::D8 => todo!(),
+        //     AddressMode::D16_R => todo!(),
+        //     AddressMode::A16_R => todo!(),
+        // };
         return format!(
-            "{: <5} {: <8} {: <2} {: <2}  {} {: >2}/{: >2}",
+            "{: <5} {: <8} {: <2} {: <2}  {} ", //{: >2}/{: >2}",
             self.instruction_type.to_string(),
             self.address_mode.to_string(),
             self.register_1.to_string(),
             self.register_2.to_string(),
             self.length.to_string(),
-            self.cycles.to_string(),
-            self.no_action_cycles.to_string()
+            // self.cycles.to_string(),
+            // self.no_action_cycles.to_string()
         );
     }
     /* pub fn length(inst: &Instruction) -> u8 {
