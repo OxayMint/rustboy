@@ -1,6 +1,7 @@
-use crate::libs::memory::Memory;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
+
+use super::bus::Bus;
 
 pub struct EmuDebug {
     dbg_msg_bytes: Vec<u8>,
@@ -15,12 +16,12 @@ impl EmuDebug {
         }
     }
 
-    pub fn update(&mut self, memory: &mut Memory) {
-        if memory.read(0xFF02) == 0b10000001 {
+    pub fn update(&mut self) {
+        if Bus::read(0xFF02) == 0b10000001 {
             // print!("Emu Debug: ");
-            let character = memory.read(0xFF01);
+            let character = Bus::read8(0xFF01);
             self.dbg_msg_bytes.push(character);
-            memory.write(0xFF02, 0);
+            Bus::write8(0xFF02, 0);
             print!("{}", character as char);
             self.should_print = true;
             return;

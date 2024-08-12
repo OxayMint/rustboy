@@ -1,19 +1,5 @@
-#[path = "engine/gb/cartridge.rs"]
-pub mod cartridge;
-#[path = "engine/gb/cpu.rs"]
-pub mod cpu;
 #[path = "engine/gameboy_engine.rs"]
 pub mod gameboy;
-#[path = "engine/gb/instruction.rs"]
-pub mod instruction;
-#[path = "engine/gb/interrupts.rs"]
-pub mod interrupts;
-#[path = "engine/gb/memory.rs"]
-pub mod memory;
-#[path = "engine/gb/rendering.rs"]
-pub mod rendering;
-#[path = "engine/gb/timer.rs"]
-pub mod timer;
 
 pub trait SetBytes {
     fn from_pair(low: u8, hi: u8) -> u16;
