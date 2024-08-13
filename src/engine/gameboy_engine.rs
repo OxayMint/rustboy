@@ -24,12 +24,13 @@ pub mod timer;
 use bus::Bus;
 use cartridge::Cartridge;
 use cpu::CPU;
+
 use ppu::PPU;
 use rendering::Renderer;
 use std::sync::atomic::AtomicU32;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc,
 };
 use std::thread;
 use std::time::Duration;
@@ -58,6 +59,7 @@ impl GameBoyEngine {
         let running = Arc::clone(&self.running);
         let paused = Arc::clone(&self.paused);
         let ticks = Arc::clone(&self.ticks);
+
         // CPU thread
         let cpu_thread = thread::spawn(move || {
             let mut cpu = CPU::new();
@@ -87,7 +89,10 @@ impl GameBoyEngine {
         _ = self.ui.init(); // Initialize the UI
 
         while self.running.load(Ordering::Relaxed) {
-            self.ui.tick(); // Handle UI updates
+            if PPU::have_update() {
+                // if true {
+                self.ui.tick(); // Handle UI updates
+            }
             if self.ui.exited {
                 self.running.store(false, Ordering::Relaxed);
             }

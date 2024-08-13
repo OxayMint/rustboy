@@ -1,7 +1,5 @@
 use std::ops::{AddAssign, SubAssign};
 
-use sdl2::libc::sleep;
-
 use super::bus::Bus;
 
 pub struct DMA {
@@ -21,29 +19,30 @@ impl DMA {
     }
 
     pub fn start(&mut self, start: u8) {
+        println!("dma start");
         self.active = false;
-        self.value = start;
+        self.byte_address = 0;
         self.start_delay = 2;
+        self.value = start;
     }
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self) -> Option<(usize, usize)> {
         if self.active {
-            return;
+            return None;
         }
         if self.start_delay > 0 {
             self.start_delay.sub_assign(1);
-            return;
+            return None;
         }
-        Bus::write8(
-            self.byte_address,
-            Bus::read8(self.value as usize * 0x100 + self.byte_address),
-        );
+
+        let source_address = self.value as usize * 0x100 + self.byte_address;
+        let dest_address = 0xFE00 + self.byte_address;
+
         self.byte_address.add_assign(1);
-        self.active = self.byte_address < 0xA0;
-        if !self.active {
-            unsafe {
-                sleep(2);
-            }
+        if self.byte_address >= 0xA0 {
+            self.active = false;
         }
+
+        Some((source_address, dest_address))
     }
     pub fn transferring(&self) -> bool {
         self.active

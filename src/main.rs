@@ -12,7 +12,7 @@ fn main() {
     }
 
     let path = &args[1];
-    // let path = "/Users/fgoja/dev/rust/rustboy/roms/cpu_instrs.gb";
+    // let path = "/Users/fgoja/dev/rust/rustboy/roms/dmg-acid2.gb";
     if !Path::new(path).exists() {
         println!("File does not exist: {}", path);
     }

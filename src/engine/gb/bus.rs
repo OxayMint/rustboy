@@ -1,12 +1,13 @@
-use std::sync::Mutex;
+use std::{process::exit, sync::Mutex};
 
 use super::{
     cartridge,
-    cpu::INT_FLAGS,
     dma::DMA,
-    io::IO_Ram,
+    io::{
+        lcd::{LCD, LCD_INSTANCE},
+        IO_Ram,
+    },
     ppu::{self, PPU},
-    timer::{read_timer_byte, write_timer_byte},
 };
 
 lazy_static! {
@@ -16,7 +17,6 @@ lazy_static! {
 pub struct Bus {
     pub cart: Option<cartridge::Cartridge>,
     pub ppu: Mutex<ppu::PPU>,
-    pub dma: DMA,
     pub wram: Mutex<[u8; 0x2000]>,
     pub hram: Mutex<[u8; 0x80]>,
     pub ioram: Mutex<IO_Ram>,
@@ -30,27 +30,11 @@ impl Bus {
             wram: Mutex::new([0; 0x2000]),
             hram: Mutex::new([0; 0x80]),
             ioram: Mutex::new(IO_Ram::new()),
-            dma: DMA::new(),
             ppu: Mutex::new(PPU::new()),
             ie_register: 0,
         }
     }
-
-    // 0x0000 - 0x3FFF : ROM Bank 0
-    // 0x4000 - 0x7FFF : ROM Bank 1 - Switchable
-    // 0x8000 - 0x97FF : CHR RAM
-    // 0x9800 - 0x9BFF : BG Map 1
-    // 0x9C00 - 0x9FFF : BG Map 2
-    // 0xA000 - 0xBFFF : Cartridge RAM
-    // 0xC000 - 0xCFFF : RAM Bank 0
-    // 0xD000 - 0xDFFF : RAM Bank 1-7 - switchable - Color only
-    // 0xE000 - 0xFDFF : Reserved - Echo RAM
-    // 0xFE00 - 0xFE9F : Object Attribute Memory
-    // 0xFEA0 - 0xFEFF : Reserved - Unusable
-    // 0xFF00 - 0xFF7F : I/O Registers
-    // 0xFF80 - 0xFFFE : Zero Page
-    fn _read8(&self, address: usize) -> u8 {
-        let mut ioram = self.ioram.lock().unwrap();
+    pub fn _read8(&self, address: usize) -> u8 {
         match address {
             //Char/BG
             0x8000..0xA000 => {
@@ -71,16 +55,22 @@ impl Bus {
             0xE000..0xFE00 => 0,
             //OAM
             0xFE00..0xFEA0 => {
-                if self.dma.active {
+                // if LCD_IN
+                let lcd = LCD_INSTANCE.lock().unwrap();
+                if lcd.dma_active() {
                     return 0xFF;
                 }
+                drop(lcd);
                 let ppu = self.ppu.lock().unwrap();
                 ppu.oam_read(address)
             }
             //useless part
             0xFEA0..0xFF00 => 0,
             //IO
-            0xFF00..0xFF80 => ioram.read(address),
+            0xFF00..0xFF80 => {
+                let mut ioram = self.ioram.lock().unwrap();
+                ioram.read(address)
+            }
             //high ram/zero page
             0xFF80..0xFFFF => self.hram_read(address),
             //CPU Interrupt enable register
@@ -89,11 +79,11 @@ impl Bus {
         }
         // return 0;
     }
-    fn _read16(&self, address: usize) -> u16 {
+    pub fn _read16(&self, address: usize) -> u16 {
         let val: u16 = self._read8(address) as u16 | ((self._read8(address + 1) as u16) << 8);
         return val;
     }
-    fn _write8(&mut self, address: usize, value: u8) {
+    pub fn _write8(&mut self, address: usize, value: u8) {
         match address {
             //cartriidge ROM
             0x8000..0xA000 => {
@@ -112,15 +102,17 @@ impl Bus {
             0xC000..0xE000 => self.wram_write(address, value),
             0xE000..0xFE00 => {}
             0xFE00..0xFEA0 => {
-                if self.dma.active {
+                let lcd = LCD_INSTANCE.lock().unwrap();
+                if lcd.dma_active() {
                     return;
                 }
+                drop(lcd);
                 let mut ppu = self.ppu.lock().unwrap();
                 ppu.oam_write(address, value)
             }
             //unused part
             0xFEA0..0xFF00 => {}
-            0xFF46 => self.dma.start(value),
+            0xFF40..=0xFF4B => LCD_INSTANCE.lock().unwrap().write(address, value),
             //IO data
             0xFF00..0xFF80 => self.ioram.lock().unwrap().write(address, value),
             //high ram/zero page
@@ -131,7 +123,7 @@ impl Bus {
         }
     }
 
-    fn _write16(&mut self, address: usize, value: u16) {
+    pub fn _write16(&mut self, address: usize, value: u16) {
         self._write8(address, value as u8);
         if (value >> 8) != 0 {
             self._write8(address + 1 as usize, (value >> 8) as u8);
@@ -187,9 +179,9 @@ impl Bus {
         // println!("stack_pop16 {}", sp);
         Bus::stack_pop8(sp) as u16 | ((Bus::stack_pop8(sp) as u16) << 8)
     }
+
     // pub fn read
     pub fn read8(address: usize) -> u8 {
-        // println!("read8 {}", address);
         MAIN_BUS.lock().unwrap()._read8(address)
     }
     pub fn read(address: usize) -> u16 {
@@ -204,7 +196,21 @@ impl Bus {
         // println!("write {}", address);
         MAIN_BUS.lock().unwrap()._write16(address, value);
     }
+    pub fn write_oam(&mut self, address: usize, value: u8) {
+        // println!("write {}", address);
+        let mut ppu = self.ppu.lock().unwrap();
+        ppu.oam_write(address, value)
+    }
+
+    fn _dma_tick(&mut self) {
+        let mut lcd = LCD_INSTANCE.lock().unwrap();
+        let mut ppu = self.ppu.lock().unwrap();
+        if let Some((src, dest)) = lcd.dma.tick() {
+            drop(lcd);
+            ppu.oam_write(dest, self._read8(src));
+        }
+    }
     pub fn dma_tick() {
-        MAIN_BUS.lock().unwrap().dma.tick();
+        MAIN_BUS.lock().unwrap()._dma_tick();
     }
 }

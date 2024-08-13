@@ -1,6 +1,7 @@
 use std::ops::{BitOr, BitOrAssign};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(u8)]
 pub enum InterruptType {
     VBLANK = 1,
     LCD_STAT = 2,
