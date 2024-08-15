@@ -17,7 +17,7 @@ lazy_static! {
     pub static ref PPU_INSTANCE: Mutex<PPU> = Mutex::new(PPU::new());
 }
 
-use super::io::lcd::{Mode, LCD_INSTANCE};
+use super::io::lcd::{Mode, COLORS, LCD_INSTANCE};
 
 pub static LINES_PER_FRAME: u8 = 154;
 pub static TICKS_PER_LINE: u16 = 456;
@@ -27,14 +27,9 @@ pub static have_update: Mutex<bool> = Mutex::new(false);
 pub struct PPU {
     pub oam_ram: [OamEntry; 40],
     pub vram: [u8; 0x2000],
-    pub current_frame: u32,
     pub line_ticks: u16,
     pub video_buffer: [Color; 144 * 160],
-    pub target_frame_time: u128,
-
-    pub frame_count: u64,
     pub pf_control: PixelFifo,
-    pub start_time: SystemTime,
 }
 
 impl PPU {
@@ -42,31 +37,17 @@ impl PPU {
         let mut lcd = LCD_INSTANCE.lock().unwrap();
         lcd.lcds_mode_set(Mode::OAM);
         drop(lcd);
-        let col = 0x9CBC10u32;
         PPU {
             oam_ram: [OamEntry::empty(); 40],
             vram: [0; 0x2000],
-            current_frame: 0,
             line_ticks: 0,
             // video_buffer: HashMap::new(),
-            video_buffer: [Color::RGB(
-                (col >> 4) as u8,
-                (col >> 2 & 0b11) as u8,
-                (col & 0b11) as u8,
-            ); 144 * 160],
+            video_buffer: [COLORS[0]; 144 * 160],
             pf_control: PixelFifo::new(),
-            target_frame_time: 1000 / 60,
-            frame_count: 0,
-            start_time: SystemTime::now(),
         }
     }
 
-    pub fn tick() {
-        // println!("tick");
-        let mut ppu = PPU_INSTANCE.lock().unwrap();
-        ppu._tick();
-    }
-    pub fn _tick(&mut self) {
+    pub fn tick(&mut self) {
         self.line_ticks = self.line_ticks.wrapping_add(1);
         let mut lcd = LCD_INSTANCE.lock().unwrap();
         // println!(

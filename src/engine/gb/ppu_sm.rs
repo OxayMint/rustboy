@@ -59,27 +59,8 @@ impl PPU {
                 if lcd.lcds_stat_int(StatType::VBLANK) {
                     CPU::request_interrupt(InterruptType::LCD_STAT);
                 }
-                self.current_frame = self.current_frame.wrapping_add(1);
 
-                // calc FPS...
-                let frame_duration = SystemTime::now().duration_since(self.start_time).unwrap();
-                // println!("frame duration: {}", frame_duration.as_millis());
-                // if frame_duration.as_millis() < self.target_frame_time {
-                //     sleep(Duration::from_millis(
-                //         (self.target_frame_time - frame_duration.as_millis()) as u64,
-                //     ))
-                // }
-                let end = SystemTime::now();
-                // unsafe { sleep(1) };
-                if end.duration_since(self.start_time).unwrap().as_millis() >= 1000 {
-                    let fps = self.frame_count;
-                    self.start_time = end;
-                    self.frame_count = 0;
-                    println!("FPS: {}", fps);
-                }
-                self.frame_count.add_assign(1);
-
-                // (*have_update.lock().unwrap()) = true;
+                (*have_update.lock().unwrap()) = true;
                 // self.prev_frame_time = Renderer::get_ticks();
             } else {
                 lcd.lcds_mode_set(Mode::OAM);

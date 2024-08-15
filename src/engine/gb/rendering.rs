@@ -36,11 +36,7 @@ impl Renderer {
         let sdl_context = sdl2::init()?;
         let video_subsystem = sdl_context.video()?;
         let window = video_subsystem
-            .window(
-                "Rustboy",
-                640 + (SCALE as u32 * 8 * 16),
-                SCALE as u32 * 8 * 32,
-            )
+            .window("Rustboy", 160 * 2 + (128 * 2), 256 * 2)
             .position_centered()
             .opengl()
             .build()
@@ -50,7 +46,7 @@ impl Renderer {
             canvas.set_draw_color(Color::BLACK);
             canvas.clear();
             canvas.present();
-            canvas.set_scale(2.0, 2.0);
+            _ = canvas.set_scale(2.0, 2.0);
         }
         self.event_pump = Some(sdl_context.event_pump()?);
         Ok(())
@@ -78,7 +74,7 @@ impl Renderer {
             }
         }
         self.draw_main(buffer);
-        // self.update_debug_window();
+        self.update_debug_window();
         if let Some(canvas) = &mut self.canvas {
             canvas.present();
         }
@@ -100,18 +96,18 @@ impl Renderer {
     }
 
     fn update_debug_window(&mut self) {
-        let (mut x_draw, mut y_draw, mut tile_index) = (600, 0, 0);
+        let (mut x_draw, mut y_draw, mut tile_index) = (160, 0, 0);
         //384 tile. 16x24
         let addr = 0x8000usize;
 
         for y in 0..24 {
             for x in 0..16 {
-                self.display_tile(addr, tile_index, x_draw + x * SCALE, y_draw + y * SCALE);
-                x_draw.add_assign(8 * SCALE);
+                self.display_tile(addr, tile_index, x_draw + x, y_draw + y);
+                x_draw.add_assign(8);
                 tile_index.add_assign(1);
             }
-            y_draw.add_assign(8 * SCALE);
-            x_draw = 600;
+            y_draw.add_assign(8);
+            x_draw = 160;
         }
     }
 
@@ -125,15 +121,15 @@ impl Renderer {
                     let hi = (b2 >> bit & 1) << 1;
                     let low = b1 >> bit & 1;
                     let col = COLORS[(hi | low) as usize];
-                    let r = Rect::new(
-                        x + (7 - bit) * SCALE,
-                        y + (row as i32 / 2 * SCALE),
-                        SCALE as u32,
-                        SCALE as u32,
-                    );
+                    // let r = Rect::new(
+                    //     x + (7 - bit),
+                    //     y + (row as i32 / 2),
+                    //     SCALE as u32,
+                    //     SCALE as u32,
+                    // );
                     canvas.set_draw_color(col);
-                    // canvas.draw_fpoint(Point::new(x, y));
-                    _ = canvas.fill_rect(r);
+                    _ = canvas.draw_point(Point::new(x + (7 - bit), y + (row as i32 / 2)));
+                    // _ = canvas.fill_rect(r);
                     bit.sub_assign(1);
                 }
             }

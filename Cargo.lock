@@ -21,6 +21,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "fps_counter"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff23a4d90ba4b859f370ee3c12ca3b1ca80d8ee144b279e135f6852cdadd6dd6"
+dependencies = [
+ "instant",
+]
+
+[[package]]
+name = "instant"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0242819d153cba4b4b05a5a8f2a7e9bbf97b6055b2a002b395c96b5ff3c0222"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -76,6 +94,7 @@ name = "rustboy"
 version = "0.1.0"
 dependencies = [
  "byteorder",
+ "fps_counter",
  "lazy_static",
  "miniquad",
  "sdl2",

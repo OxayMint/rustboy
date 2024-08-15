@@ -25,6 +25,7 @@ use bus::Bus;
 use cartridge::Cartridge;
 use cpu::CPU;
 
+use fps_counter::FPSCounter;
 use io::lcd::LCD_INSTANCE;
 use ppu::PPU;
 use rendering::Renderer;
@@ -34,7 +35,7 @@ use std::sync::{
     Arc,
 };
 use std::thread::{self, sleep};
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime};
 use EmuDebug::EMU_DEBUG;
 
 pub struct GameBoyEngine {
@@ -42,6 +43,11 @@ pub struct GameBoyEngine {
     pub running: Arc<AtomicBool>,
     pub ui: Renderer,
     pub ticks: Arc<AtomicU32>,
+    pub current_frame: u32,
+
+    pub target_frame_time: u128,
+    pub frame_count: u64,
+    pub last_frame_time: SystemTime,
 }
 
 impl GameBoyEngine {
@@ -53,6 +59,11 @@ impl GameBoyEngine {
             paused: Arc::new(AtomicBool::new(false)),
             running: Arc::new(AtomicBool::new(true)),
             ticks: Arc::new(AtomicU32::new(0)),
+
+            current_frame: 0,
+            frame_count: 0,
+            last_frame_time: SystemTime::now(),
+            target_frame_time: 1000 / 60,
         }
     }
 
@@ -89,12 +100,63 @@ impl GameBoyEngine {
 
         _ = self.ui.init(); // Initialize the UI
 
+        let mut fps = FPSCounter::default();
+
+        // let mut fps_counter = FPSCounter::new();
+
+        let target_fps = 60.0;
+        let frame_duration = Duration::from_secs_f64(1.0 / target_fps);
+
+        let mut frame_start = Instant::now();
         while self.running.load(Ordering::Relaxed) {
             // while true {
-            // if PPU::have_update() {
-            if true {
+            if PPU::have_update() {
+                // calc FPS...
+
                 let video_buffer = PPU::get_video_buffer();
                 self.ui.update(video_buffer); // Handle UI updates
+
+                let elapsed = frame_start.elapsed();
+                let mut sleep_time = Duration::default();
+                if elapsed < frame_duration {
+                    sleep_time = frame_duration - elapsed;
+                    // println!("sleeping {sleep_time:?}");
+                    thread::sleep(sleep_time);
+                }
+                // let fps = fps.tick();
+                let fps = fps.tick();
+                // Update and print FPS
+                println!("FPS: {fps}. Frame duration: {elapsed:?}. Slept {sleep_time:?}",);
+
+                // self.current_frame = self.current_frame.wrapping_add(1);
+
+                // let end = SystemTime::now();
+
+                // let frame_duration = end.duration_since(self.last_frame_time).unwrap();
+                // if fps > 60 {
+                //     println!("FPS: {fps}. Sleeping");
+                //     let sleep_time = fps % 60 / 60;
+                //     //
+                //     sleep(Duration::from_millis(sleep_time as u64));
+                // } else {
+                //     println!("FPS: {fps}. Not sleeping");
+                // }
+
+                // // unsafe { sleep(1) };
+                // if end
+                //     .duration_since(self.last_frame_time)
+                //     .unwrap()
+                //     .as_millis()
+                //     >= 1000
+                // {
+                //     println!("FPS: {}", self.frame_count);
+                //     self.last_frame_time = end;
+                //     self.frame_count = 0;
+                // }
+                // self.frame_count += 1;
+
+                // // if true {
+                frame_start = Instant::now();
             }
             if self.ui.exited {
                 self.running.store(false, Ordering::Relaxed);

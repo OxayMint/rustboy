@@ -153,7 +153,7 @@ impl CPU {
                 // ctx.ticks++;
                 // println!("call tick from CPU");
                 timer.tick();
-                ppu._tick();
+                ppu.tick();
             }
             let mut bus = MAIN_BUS.lock().unwrap();
 
