@@ -7,11 +7,11 @@ use std::{
 use sdl2::{
     event::Event,
     keyboard::Keycode,
-    pixels::{Color, PixelFormat, PixelFormatEnum},
-    rect::Rect,
+    pixels::Color,
+    rect::{Point, Rect},
 };
 
-use super::{bus::Bus, io::lcd::COLORS, ppu::TICKS_PER_LINE};
+use super::{bus::Bus, io::lcd::COLORS};
 pub static SCALE: i32 = 2;
 
 static RENDER_TICKS: Mutex<u64> = Mutex::new(0);
@@ -50,15 +50,15 @@ impl Renderer {
             canvas.set_draw_color(Color::BLACK);
             canvas.clear();
             canvas.present();
+            canvas.set_scale(2.0, 2.0);
         }
         self.event_pump = Some(sdl_context.event_pump()?);
-
         Ok(())
     }
 
-    pub fn tick(&mut self) {
+    pub fn update(&mut self, buffer: Vec<Color>) {
         if let Some(canvas) = &mut self.canvas {
-            canvas.set_draw_color(Color::BLACK);
+            canvas.set_draw_color(COLORS[0]);
             canvas.clear();
         }
 
@@ -77,20 +77,26 @@ impl Renderer {
                 }
             }
         }
-
-        // if let Some(canvas) = &mut self.canvas {
-        //     canvas.clear();
-        //     canvas.present();
-        // }
-        self.update_debug_window();
+        self.draw_main(buffer);
+        // self.update_debug_window();
         if let Some(canvas) = &mut self.canvas {
             canvas.present();
-            Renderer::add_ticks();
         }
 
         // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
 
         // The rest of the game loop goes here...
+    }
+
+    fn draw_main(&mut self, pixels: Vec<Color>) {
+        if let Some(canvas) = &mut self.canvas {
+            for row in 0..144i32 {
+                for col in 0..160i32 {
+                    canvas.set_draw_color(pixels[col as usize + (row * 160) as usize]);
+                    _ = canvas.draw_point(Point::new(col, row));
+                }
+            }
+        }
     }
 
     fn update_debug_window(&mut self) {
@@ -116,8 +122,8 @@ impl Renderer {
                 let b2 = Bus::read8(addr + (tile_index * 16) + row);
                 let mut bit = 7i32;
                 while bit >= 0 {
-                    let hi = (b1 >> bit & 1) << 1;
-                    let low = b2 >> bit & 1;
+                    let hi = (b2 >> bit & 1) << 1;
+                    let low = b1 >> bit & 1;
                     let col = COLORS[(hi | low) as usize];
                     let r = Rect::new(
                         x + (7 - bit) * SCALE,
@@ -125,8 +131,8 @@ impl Renderer {
                         SCALE as u32,
                         SCALE as u32,
                     );
-
                     canvas.set_draw_color(col);
+                    // canvas.draw_fpoint(Point::new(x, y));
                     _ = canvas.fill_rect(r);
                     bit.sub_assign(1);
                 }

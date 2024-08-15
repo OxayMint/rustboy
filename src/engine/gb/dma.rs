@@ -19,7 +19,7 @@ impl DMA {
     }
 
     pub fn start(&mut self, start: u8) {
-        println!("dma start");
+        // println!("dma start");
         self.active = false;
         self.byte_address = 0;
         self.start_delay = 2;
@@ -35,12 +35,10 @@ impl DMA {
         }
 
         let source_address = self.value as usize * 0x100 + self.byte_address;
-        let dest_address = 0xFE00 + self.byte_address;
+        let dest_address = self.byte_address;
 
         self.byte_address.add_assign(1);
-        if self.byte_address >= 0xA0 {
-            self.active = false;
-        }
+        self.active = self.byte_address < 0xA0;
 
         Some((source_address, dest_address))
     }

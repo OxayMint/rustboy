@@ -1,6 +1,8 @@
 use lazy_static::lazy_static;
 use std::{ops::AddAssign, process::exit, sync::Mutex};
 
+use super::{cpu::CPU, interrupts::InterruptType};
+
 lazy_static! {
     pub static ref TIMER: Mutex<Timer> = Mutex::new(Timer::new());
 }
@@ -26,8 +28,7 @@ impl Timer {
         }
     }
 
-    pub fn tick(&mut self) -> bool {
-        let mut interrupt_requested = false;
+    pub fn tick(&mut self) {
         let prev_div = self.div;
         self.div = self.div.wrapping_add(1);
         let mut timer_update = false;
@@ -47,11 +48,9 @@ impl Timer {
             self.tima = self.tima.wrapping_add(1);
             if self.tima == 0xFF {
                 self.tima = self.tma;
-                interrupt_requested = true;
+                CPU::request_interrupt(InterruptType::TIMER);
             }
         }
-
-        interrupt_requested
     }
 
     pub fn read_byte(&self, address: usize) -> u8 {
@@ -69,8 +68,8 @@ impl Timer {
             0xFF04 => self.div = 0,
             0xFF05 => self.tima = value,
             0xFF06 => self.tma = value,
-            // 0xFF07 => self.tac = value & 0x07,
-            0xFF07 => self.tac = value,
+            0xFF07 => self.tac = value & 0x07,
+            // 0xFF07 => self.tac = value,
             _ => panic!("Invalid timer address: {:04X}", address),
         }
     }
@@ -86,7 +85,7 @@ impl Timer {
 }
 
 // Helper functions to easily access the timer
-pub fn tick_timer() -> bool {
+pub fn tick_timer() {
     TIMER.lock().unwrap().tick()
 }
 

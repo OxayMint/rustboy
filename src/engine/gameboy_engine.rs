@@ -25,6 +25,7 @@ use bus::Bus;
 use cartridge::Cartridge;
 use cpu::CPU;
 
+use io::lcd::LCD_INSTANCE;
 use ppu::PPU;
 use rendering::Renderer;
 use std::sync::atomic::AtomicU32;
@@ -32,7 +33,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::thread;
+use std::thread::{self, sleep};
 use std::time::Duration;
 use EmuDebug::EMU_DEBUG;
 
@@ -89,13 +90,16 @@ impl GameBoyEngine {
         _ = self.ui.init(); // Initialize the UI
 
         while self.running.load(Ordering::Relaxed) {
-            if PPU::have_update() {
-                // if true {
-                self.ui.tick(); // Handle UI updates
+            // while true {
+            // if PPU::have_update() {
+            if true {
+                let video_buffer = PPU::get_video_buffer();
+                self.ui.update(video_buffer); // Handle UI updates
             }
             if self.ui.exited {
                 self.running.store(false, Ordering::Relaxed);
             }
+            // thread::yield_now();
         }
         // Wait for CPU thread to finish
         cpu_thread.join().unwrap();

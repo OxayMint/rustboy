@@ -12,6 +12,7 @@ use super::{
 
 lazy_static! {
     pub static ref MAIN_BUS: Mutex<Bus> = Mutex::new(Bus::new());
+    // pub static ref dMAIN_BUS: ssMutex<Bus> = Mutex::new(Bus::new());
 }
 
 pub struct Bus {
@@ -122,7 +123,6 @@ impl Bus {
             _ => println!("wrote nothing, sorry..."),
         }
     }
-
     pub fn _write16(&mut self, address: usize, value: u16) {
         self._write8(address, value as u8);
         if (value >> 8) != 0 {
@@ -163,6 +163,7 @@ impl Bus {
         *sp = sp.wrapping_sub(1);
         bus._write8(*sp as usize, value);
     }
+
     pub fn stack_pop8(sp: &mut u16) -> u8 {
         // println!("stack_pop8 {}", sp);
         let bus = MAIN_BUS.lock().unwrap();
@@ -170,11 +171,13 @@ impl Bus {
         *sp = sp.wrapping_add(1);
         val
     }
+
     pub fn stack_push16(sp: &mut u16, value: u16) {
         // println!("stack_push16 {}", sp);
         Bus::stack_push8(sp, (value >> 8) as u8);
         Bus::stack_push8(sp, (value & 0xff) as u8);
     }
+
     pub fn stack_pop16(sp: &mut u16) -> u16 {
         // println!("stack_pop16 {}", sp);
         Bus::stack_pop8(sp) as u16 | ((Bus::stack_pop8(sp) as u16) << 8)
@@ -202,12 +205,13 @@ impl Bus {
         ppu.oam_write(address, value)
     }
 
-    fn _dma_tick(&mut self) {
+    pub fn _dma_tick(&mut self) {
         let mut lcd = LCD_INSTANCE.lock().unwrap();
-        let mut ppu = self.ppu.lock().unwrap();
         if let Some((src, dest)) = lcd.dma.tick() {
             drop(lcd);
-            ppu.oam_write(dest, self._read8(src));
+            let val = self._read8(src);
+            let mut ppu = self.ppu.lock().unwrap();
+            ppu.oam_write(dest, val);
         }
     }
     pub fn dma_tick() {

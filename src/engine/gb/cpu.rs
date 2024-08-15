@@ -7,11 +7,12 @@ pub mod interrupts;
 use super::bus::{Bus, MAIN_BUS};
 use super::instruction::*;
 use super::interrupts::InterruptType;
-use super::ppu::PPU;
-use super::timer::tick_timer;
+use super::ppu::{PPU, PPU_INSTANCE};
+use super::timer::{tick_timer, TIMER};
 use super::EmuDebug::EmuDebug;
 // use super::
 use std::ops::AddAssign;
+use std::process::exit;
 use std::sync::Mutex;
 
 lazy_static::lazy_static! {
@@ -26,7 +27,7 @@ pub struct CPU {
     pub current_instruction: Instruction,
     pub int_master_enabled: bool,
     pub ime_enabling: bool,
-    // af_count: u32,
+    af_count: u32,
     emu_dbg: EmuDebug,
 }
 
@@ -64,7 +65,7 @@ impl CPU {
             halted: false,
             int_master_enabled: false,
             ime_enabling: false,
-            // af_count: 0,
+            af_count: 0,
             emu_dbg: EmuDebug::new(),
             current_instruction: Instruction {
                 ..Default::default()
@@ -120,14 +121,19 @@ impl CPU {
 
             self.emu_cycles(1);
             self.fetch_data();
-            self.emu_dbg.update();
+            // self.emu_dbg.update();
 
             res = self.execute();
         } else {
-            println!("halted");
+            // println!("halted");
             self.emu_cycles(1);
             if *INT_FLAGS.lock().unwrap() > 0 {
                 self.halted = false;
+            } else {
+                if self.af_count > 10 {
+                    // exit(0);
+                }
+                self.af_count.add_assign(1);
             }
         }
         if self.int_master_enabled {
@@ -140,29 +146,24 @@ impl CPU {
         return res;
     }
     pub fn emu_cycles(&mut self, cycles: u32) {
+        let mut timer = TIMER.lock().unwrap();
+        let mut ppu = PPU_INSTANCE.lock().unwrap();
         for _ in 0..cycles {
             for _ in 0..4 {
                 // ctx.ticks++;
                 // println!("call tick from CPU");
-                if tick_timer() {
-                    CPU::request_interrupt(InterruptType::TIMER);
-                }
-                PPU::tick();
+                timer.tick();
+                ppu._tick();
             }
+            let mut bus = MAIN_BUS.lock().unwrap();
 
-            Bus::dma_tick();
+            bus._dma_tick();
         }
     }
 
     pub fn request_interrupt(int_type: InterruptType) {
-        if int_type == InterruptType::VBLANK {
-            println!("requesting interrupt {}", int_type as u8);
-        }
         let mut flags = INT_FLAGS.lock().unwrap();
         *flags |= int_type;
-        if int_type == InterruptType::VBLANK {
-            println!("requesting interrupt {}", *flags as u8);
-        }
     }
     pub fn increment_pointer(&mut self, by: u16) {
         self.regs.pc.add_assign(by)

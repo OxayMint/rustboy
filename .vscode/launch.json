@@ -5,6 +5,32 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Cargo1 launch",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--lib"
+                ]
+            },
+            "args": []
+        },
+        
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Cargo launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "/Users/fgoja/dev/rust/rustboy/roms/tetris.gb"
+                ]
+            },
+            "args": []
+        },
+
+        {
             "name": "Debug with LLDB",
             "type": "lldb",
             "request": "launch",
@@ -15,27 +41,15 @@
             // As such, this path would have to change accordingly.
             "program": "${workspaceFolder}/target/debug/${workspaceFolderBasename}",
             // If you wish to supply arguments/parameters to the program, supply them below:
-            "args": [],
+            "args": ["/Users/fgoja/dev/rust/rustboy/roms/tetris.gb"],
             // Working folder for execution. Change as necessary if program requires a different value:
             "cwd": "${workspaceFolder}",
             "terminal": "external",
             "stopOnEntry": false,
+            "initCommands": [],
             // Instructs LLVM to apply special Rust-language-specific functionality to its analysis:
-            "sourceLanguages": ["rust"]
+            "sourceLanguages": ["rust"],
         },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Cargo launch",
-            "cargo": {
-                "args": [
-                    "run",
-                    "../roms/01-soecial.gb"
-                ]
-            },
-            "args": []
-        }
-
 
         
 

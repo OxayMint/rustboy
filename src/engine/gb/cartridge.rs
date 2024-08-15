@@ -14,13 +14,13 @@ impl Cartridge {
         let cart_data = Cartridge::cart_load(path);
         if cart_data.is_some() {
             let unwrapped_data = cart_data.unwrap();
-            for row in 0..16 {
-                let ptr = row + 0x100;
-                for idx in 0..16 {
-                    print!("{:02X} ", unwrapped_data[idx + ptr]);
-                }
-                print!("\n")
-            }
+            // for row in 0..16 {
+            //     let ptr = row + 0x100;
+            //     for idx in 0..16 {
+            //         print!("{:02X} ", unwrapped_data[idx + ptr]);
+            //     }
+            //     print!("\n")
+            // }
             match Cartridge::get_info(&unwrapped_data) {
                 Ok(info) => Ok(Cartridge {
                     info: info,
@@ -286,7 +286,7 @@ impl Cartridge {
         } else {
             licensee = old_map[&card[0x014B]];
         }
-        println!("licensee code {}", card[0x014B]);
+        // println!("licensee code {}", card[0x014B]);
         // $00	ROM ONLY
         let mbc_indecies = HashMap::from([
             (0x01, 1),

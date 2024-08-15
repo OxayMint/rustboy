@@ -2,51 +2,39 @@
 
 #[path = "model/ppu.rs"]
 pub mod ppu_models;
+#[path = "ppu_pipeline.rs"]
+pub mod ppu_pipeline;
 #[path = "ppu_sm.rs"]
 pub mod ppu_sm;
-
-use std::{ops::AddAssign, sync::Mutex};
+use lazy_static::lazy_static;
 
 use ppu_models::*;
+use sdl2::pixels::Color;
+
+use std::{alloc::System, sync::Mutex, time::SystemTime};
 
 lazy_static! {
-    static ref PPU_INSTANCE: Mutex<PPU> = Mutex::new(PPU::new());
+    pub static ref PPU_INSTANCE: Mutex<PPU> = Mutex::new(PPU::new());
 }
 
 use super::io::lcd::{Mode, LCD_INSTANCE};
 
-pub static LINES_PER_FRAME: u16 = 154;
+pub static LINES_PER_FRAME: u8 = 154;
 pub static TICKS_PER_LINE: u16 = 456;
-pub static YRES: u16 = 144;
-pub static XRES: u32 = 160;
+pub static YRES: u8 = 144;
+pub static XRES: u8 = 160;
 pub static have_update: Mutex<bool> = Mutex::new(false);
 pub struct PPU {
     pub oam_ram: [OamEntry; 40],
     pub vram: [u8; 0x2000],
     pub current_frame: u32,
     pub line_ticks: u16,
-    pub video_buffer: [u32; 144 * 160],
+    pub video_buffer: [Color; 144 * 160],
+    pub target_frame_time: u128,
 
-    pub target_frame_time: u64,
-    pub prev_frame_time: u64,
-    pub start_timer: u64,
     pub frame_count: u64,
-    // = 1000 / 60
-    // = 0
-    // = 0
-    // = 0
-    // pixel_fifo_context pfc;
-
-    // u8 line_sprite_count; //0 to 10 sprites.
-    // oam_line_entry *line_sprites; //linked list of current sprites on line.
-    // oam_line_entry line_entry_array[10]; //memory to use for list.
-
-    // u8 fetched_entry_count;
-    // oam_entry fetched_entries[3]; //entries fetched during pipeline.
-
-    // u32 current_frame;
-    // u32 line_ticks;
-    // u32 *video_buffer;
+    pub pf_control: PixelFifo,
+    pub start_time: SystemTime,
 }
 
 impl PPU {
@@ -54,17 +42,22 @@ impl PPU {
         let mut lcd = LCD_INSTANCE.lock().unwrap();
         lcd.lcds_mode_set(Mode::OAM);
         drop(lcd);
+        let col = 0x9CBC10u32;
         PPU {
             oam_ram: [OamEntry::empty(); 40],
             vram: [0; 0x2000],
             current_frame: 0,
             line_ticks: 0,
-            video_buffer: [0; 144 * 160],
-
+            // video_buffer: HashMap::new(),
+            video_buffer: [Color::RGB(
+                (col >> 4) as u8,
+                (col >> 2 & 0b11) as u8,
+                (col & 0b11) as u8,
+            ); 144 * 160],
+            pf_control: PixelFifo::new(),
             target_frame_time: 1000 / 60,
-            prev_frame_time: 0,
-            start_timer: 0,
             frame_count: 0,
+            start_time: SystemTime::now(),
         }
     }
 
@@ -73,11 +66,14 @@ impl PPU {
         let mut ppu = PPU_INSTANCE.lock().unwrap();
         ppu._tick();
     }
-    fn _tick(&mut self) {
-        // println!("_tick");
-        self.line_ticks.add_assign(1);
+    pub fn _tick(&mut self) {
+        self.line_ticks = self.line_ticks.wrapping_add(1);
         let mut lcd = LCD_INSTANCE.lock().unwrap();
-        // println!("ppu tick. lcds mode : {}", lcd.lcds_mode() as u8);
+        // println!(
+        //     "ppu tick. mode: {:?}, tick: {}",
+        //     lcd.lcds_mode(),
+        //     self.line_ticks
+        // );
         match lcd.lcds_mode() {
             Mode::OAM => self.mode_oam(&mut lcd),
             Mode::HBlank => self.mode_hblank(&mut lcd),
@@ -154,5 +150,10 @@ impl PPU {
     }
     pub fn vram_read(&self, address: usize) -> u8 {
         self.vram[address - 0x8000]
+    }
+
+    pub fn get_video_buffer() -> Vec<Color> {
+        let ppu = PPU_INSTANCE.lock().unwrap();
+        return Vec::from(ppu.video_buffer);
     }
 }
