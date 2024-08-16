@@ -7,20 +7,20 @@ use sdl2::pixels::Color;
 
 use crate::libs::gameboy::{cpu::CPU, dma::DMA, interrupts::InterruptType};
 
+// //E1F8CF
+// Color::RGB(0xE1, 0xF8, 0xCF),
+// //87C06C
+// Color::RGB(0x87, 0xC0, 0x6C),
+// //2F6850
+// Color::RGB(0x2F, 0x68, 0x50),
+// //071821
+// Color::RGB(0x07, 0x18, 0x21),
 pub static COLORS: [Color; 4] = [
-    //E1F8CF
-    Color::RGB(0xE1, 0xF8, 0xCF),
-    //87C06C
-    Color::RGB(0x87, 0xC0, 0x6C),
-    //2F6850
-    Color::RGB(0x2F, 0x68, 0x50),
-    //071821
-    Color::RGB(0x07, 0x18, 0x21),
+    Color::WHITE,
+    Color::RGB(0xAA, 0xAA, 0xAA),
+    Color::RGB(0x55, 0x55, 0x55),
+    Color::RGB(0x00, 0x00, 0x00),
 ];
-// Color::WHITE,
-// Color::RGB(0xAA, 0xAA, 0xAA),
-// Color::RGB(0x55, 0x55, 0x55),
-// Color::RGB(0x00, 0x00, 0x00),
 
 lazy_static! {
     pub static ref LCD_INSTANCE: Mutex<LCD> = Mutex::new(LCD::new());
@@ -101,7 +101,7 @@ impl LCD {
     }
     // 0: BG & Window enable / priority [Different meaning in CGB Mode]: 0 = Off; 1 = On
     pub fn lcdc_bgw_enabled(&self) -> bool {
-        return (self.lcdc & 1) > 0;
+        return (self.lcdc & 1) == 0;
     }
     // 1: OBJ enable: 0 = Off; 1 = On
     pub fn lcdc_obj_enabled(&self) -> bool {
@@ -110,6 +110,9 @@ impl LCD {
     // 2: OBJ size: 0 = 8×8; 1 = 8×16
     pub fn lcdc_obj_double_size(&self) -> bool {
         return (self.lcdc >> 2) & 1 > 0;
+    }
+    pub fn lcdc_obj_height(&self) -> u8 {
+        return self.lcdc_obj_double_size() as u8 * 8 + 8;
     }
     // 3: BG tile map area: 0 = 9800–9BFF; 1 = 9C00–9FFF
     pub fn lcdc_bg_map_area(&self) -> usize {

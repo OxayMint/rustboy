@@ -26,6 +26,27 @@ impl OamEntry {
             attributes: 0,
         }
     }
+
+    //     Byte 3 — Attributes/Flags
+
+    // Priority: 0 = No, 1 = BG and Window colors 1–3 are drawn over this OBJ
+    // Y flip: 0 = Normal, 1 = Entire OBJ is vertically mirrored
+    // X flip: 0 = Normal, 1 = Entire OBJ is horizontally mirrored
+    // DMG palette [Non CGB Mode only]: 0 = OBP0, 1 = OBP1
+    // Bank [CGB Mode Only]: 0 = Fetch tile from VRAM bank 0, 1 = Fetch tile from VRAM bank 1
+    // CGB palette [CGB Mode Only]: Which of OBP0–7 to use
+    pub fn x_flipped(&self) -> bool {
+        self.attributes >> 5 & 1 > 0
+    }
+    pub fn y_flipped(&self) -> bool {
+        self.attributes >> 6 & 1 > 0
+    }
+    pub fn draw_under_bg(&self) -> bool {
+        self.attributes >> 7 & 1 > 0
+    }
+    pub fn palette(&self) -> u8 {
+        self.attributes >> 4 & 1
+    }
 }
 
 pub enum FetchState {

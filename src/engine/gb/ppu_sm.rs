@@ -11,13 +11,17 @@ use crate::libs::gameboy::{
     rendering::Renderer,
 };
 
-use super::{have_update, LINES_PER_FRAME, PPU, TICKS_PER_LINE, XRES, YRES};
+use super::{ LINES_PER_FRAME, PPU, TICKS_PER_LINE, XRES, YRES};
 
 impl PPU {
     pub fn mode_oam(&mut self, lcd: &mut LCD) {
         if self.line_ticks >= 80 {
             lcd.lcds_mode_set(Mode::XFER);
             self.pf_control.reset_x();
+        }
+        if self.line_ticks == 1 {
+            self.line_entries.clear();
+            self.load_line_sprites(lcd);
         }
     }
     pub fn mode_xfer(&mut self, lcd: &mut LCD) {
@@ -60,7 +64,7 @@ impl PPU {
                     CPU::request_interrupt(InterruptType::LCD_STAT);
                 }
 
-                (*have_update.lock().unwrap()) = true;
+                self.have_update = true;
                 // self.prev_frame_time = Renderer::get_ticks();
             } else {
                 lcd.lcds_mode_set(Mode::OAM);

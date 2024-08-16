@@ -11,7 +11,7 @@ pub struct DMA {
 impl DMA {
     pub fn new() -> DMA {
         DMA {
-            active: true,
+            active: false,
             byte_address: 0,
             value: 0,
             start_delay: 0,
@@ -26,7 +26,7 @@ impl DMA {
         self.value = start;
     }
     pub fn tick(&mut self) -> Option<(usize, usize)> {
-        if self.active {
+        if !self.active {
             return None;
         }
         if self.start_delay > 0 {

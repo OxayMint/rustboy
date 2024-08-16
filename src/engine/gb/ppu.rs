@@ -23,13 +23,15 @@ pub static LINES_PER_FRAME: u8 = 154;
 pub static TICKS_PER_LINE: u16 = 456;
 pub static YRES: u8 = 144;
 pub static XRES: u8 = 160;
-pub static have_update: Mutex<bool> = Mutex::new(false);
 pub struct PPU {
     pub oam_ram: [OamEntry; 40],
     pub vram: [u8; 0x2000],
+    pub line_entries: Vec<OamEntry>,
+    pub fetched_entries: Vec<OamEntry>,
     pub line_ticks: u16,
     pub video_buffer: [Color; 144 * 160],
     pub pf_control: PixelFifo,
+    pub have_update: bool,
 }
 
 impl PPU {
@@ -41,9 +43,12 @@ impl PPU {
             oam_ram: [OamEntry::empty(); 40],
             vram: [0; 0x2000],
             line_ticks: 0,
+            line_entries: vec![],
+            fetched_entries: vec![],
             // video_buffer: HashMap::new(),
             video_buffer: [COLORS[0]; 144 * 160],
             pf_control: PixelFifo::new(),
+            have_update: false,
         }
     }
 
@@ -66,11 +71,9 @@ impl PPU {
         // match self
     }
 
-    pub fn have_update() -> bool {
-        // return true;
-        let mut update = have_update.lock().unwrap();
-        if *update {
-            *update = false;
+    pub fn have_update(&mut self) -> bool {
+        if self.have_update {
+            self.have_update = false;
             true
         } else {
             false
@@ -88,7 +91,6 @@ impl PPU {
             // 40 entries * 4 bytes each = 160 bytes
             let entry_index = adjusted_address / 4;
             let byte_index = adjusted_address % 4;
-
             match byte_index {
                 0 => self.oam_ram[entry_index].y = value,
                 1 => self.oam_ram[entry_index].x = value,
@@ -130,11 +132,11 @@ impl PPU {
         self.vram[address - 0x8000] = value;
     }
     pub fn vram_read(&self, address: usize) -> u8 {
+        // println!("reading vram: {address:04X}");
         self.vram[address - 0x8000]
     }
 
-    pub fn get_video_buffer() -> Vec<Color> {
-        let ppu = PPU_INSTANCE.lock().unwrap();
-        return Vec::from(ppu.video_buffer);
+    pub fn get_video_buffer(&self) -> Vec<Color> {
+        Vec::from(self.video_buffer)
     }
 }

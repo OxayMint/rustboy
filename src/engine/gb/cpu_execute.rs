@@ -139,7 +139,6 @@ impl CPU {
             InstructionType::LD => {
                 if self.destination_is_mem {
                     if self.current_instruction.register_2 >= RegisterType::AF {
-                        // SP to MAIN_BUS
                         Bus::write8(self.mem_dest, self.fetched_data as u8);
                         self.emu_cycles(1);
                         Bus::write8(self.mem_dest + 1, (self.fetched_data >> 8) as u8);

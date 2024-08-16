@@ -1,5 +1,3 @@
-use std::{process::exit, sync::Mutex};
-
 use super::{
     cartridge,
     dma::DMA,
@@ -9,6 +7,8 @@ use super::{
     },
     ppu::{self, PPU},
 };
+use crate::libs::gameboy::ppu::PPU_INSTANCE;
+use std::{process::exit, sync::Mutex};
 
 lazy_static! {
     pub static ref MAIN_BUS: Mutex<Bus> = Mutex::new(Bus::new());
@@ -17,7 +17,6 @@ lazy_static! {
 
 pub struct Bus {
     pub cart: Option<cartridge::Cartridge>,
-    pub ppu: Mutex<ppu::PPU>,
     pub wram: Mutex<[u8; 0x2000]>,
     pub hram: Mutex<[u8; 0x80]>,
     pub ioram: Mutex<IO_Ram>,
@@ -31,7 +30,6 @@ impl Bus {
             wram: Mutex::new([0; 0x2000]),
             hram: Mutex::new([0; 0x80]),
             ioram: Mutex::new(IO_Ram::new()),
-            ppu: Mutex::new(PPU::new()),
             ie_register: 0,
         }
     }
@@ -39,7 +37,7 @@ impl Bus {
         match address {
             //Char/BG
             0x8000..0xA000 => {
-                let ppu = self.ppu.lock().unwrap();
+                let ppu = PPU_INSTANCE.lock().unwrap();
                 ppu.vram_read(address)
             }
             //cartriidge ROM or Ext ram
@@ -57,12 +55,13 @@ impl Bus {
             //OAM
             0xFE00..0xFEA0 => {
                 // if LCD_IN
+                // panic!("read oam from oam!");
                 let lcd = LCD_INSTANCE.lock().unwrap();
                 if lcd.dma_active() {
                     return 0xFF;
                 }
                 drop(lcd);
-                let ppu = self.ppu.lock().unwrap();
+                let ppu = PPU_INSTANCE.lock().unwrap();
                 ppu.oam_read(address)
             }
             //useless part
@@ -88,7 +87,7 @@ impl Bus {
         match address {
             //cartriidge ROM
             0x8000..0xA000 => {
-                let mut ppu = self.ppu.lock().unwrap();
+                let mut ppu = PPU_INSTANCE.lock().unwrap();
                 ppu.vram_write(address, value)
             }
             //order matters here since ppu wram addres range is inside the cart range
@@ -108,7 +107,7 @@ impl Bus {
                     return;
                 }
                 drop(lcd);
-                let mut ppu = self.ppu.lock().unwrap();
+                let mut ppu = PPU_INSTANCE.lock().unwrap();
                 ppu.oam_write(address, value)
             }
             //unused part
@@ -200,21 +199,16 @@ impl Bus {
         MAIN_BUS.lock().unwrap()._write16(address, value);
     }
     pub fn write_oam(&mut self, address: usize, value: u8) {
-        // println!("write {}", address);
-        let mut ppu = self.ppu.lock().unwrap();
+        let mut ppu = PPU_INSTANCE.lock().unwrap();
         ppu.oam_write(address, value)
     }
 
-    pub fn _dma_tick(&mut self) {
+    pub fn dma_tick(&mut self) {
         let mut lcd = LCD_INSTANCE.lock().unwrap();
         if let Some((src, dest)) = lcd.dma.tick() {
             drop(lcd);
             let val = self._read8(src);
-            let mut ppu = self.ppu.lock().unwrap();
-            ppu.oam_write(dest, val);
+            self.write_oam(dest, val);
         }
-    }
-    pub fn dma_tick() {
-        MAIN_BUS.lock().unwrap()._dma_tick();
     }
 }

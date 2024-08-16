@@ -25,6 +25,7 @@ use bus::Bus;
 use cartridge::Cartridge;
 use cpu::CPU;
 
+use crate::libs::gameboy::ppu::PPU_INSTANCE;
 use fps_counter::FPSCounter;
 use io::lcd::LCD_INSTANCE;
 use ppu::PPU;
@@ -109,12 +110,15 @@ impl GameBoyEngine {
 
         let mut frame_start = Instant::now();
         while self.running.load(Ordering::Relaxed) {
-            // while true {
-            if PPU::have_update() {
+            let ppu = PPU_INSTANCE.lock().unwrap();
+            // if ppu.have_update() {
+            if true {
                 // calc FPS...
 
-                let video_buffer = PPU::get_video_buffer();
-                self.ui.update(video_buffer); // Handle UI updates
+                let video_buffer = ppu.get_video_buffer();
+                let debug_ram = ppu.vram;
+                drop(ppu);
+                self.ui.update(video_buffer, debug_ram); // Handle UI updates
 
                 let elapsed = frame_start.elapsed();
                 let mut sleep_time = Duration::default();

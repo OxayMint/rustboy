@@ -157,7 +157,7 @@ impl CPU {
             }
             let mut bus = MAIN_BUS.lock().unwrap();
 
-            bus._dma_tick();
+            bus.dma_tick();
         }
     }
 
