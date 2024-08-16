@@ -12,9 +12,9 @@ fn main() {
         println!("Usage: program <path_to_rom>");
     }
     // let path = &args[1];
-
-    let path = "/Users/fgoja/dev/rust/rustboy/roms/dmg-acid2.gb";
-    // let path = "/Users/fgoja/dev/rust/rustboy/roms/drmario.gb";
+    
+    // let path = "/Users/fgoja/dev/rust/rustboy/roms/dmg-acid2.gb";
+    let path = "/Users/fgoja/dev/rust/rustboy/roms/drmario.gb";
     // let path = "/Users/fgoja/dev/rust/rustboy/roms/tetris.gb";
     // let path = "/Users/fgoja/dev/rust/rustboy/roms/asteroids.gb";
     if !Path::new(path).exists() {

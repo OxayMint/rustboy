@@ -9,7 +9,6 @@ use super::instruction::*;
 use super::interrupts::InterruptType;
 use super::ppu::{PPU, PPU_INSTANCE};
 use super::timer::{tick_timer, TIMER};
-use super::EmuDebug::EmuDebug;
 // use super::
 use std::ops::AddAssign;
 use std::process::exit;
@@ -28,7 +27,6 @@ pub struct CPU {
     pub int_master_enabled: bool,
     pub ime_enabling: bool,
     af_count: u32,
-    emu_dbg: EmuDebug,
 }
 
 impl Registers {
@@ -66,7 +64,7 @@ impl CPU {
             int_master_enabled: false,
             ime_enabling: false,
             af_count: 0,
-            emu_dbg: EmuDebug::new(),
+
             current_instruction: Instruction {
                 ..Default::default()
             },
@@ -147,13 +145,15 @@ impl CPU {
     }
     pub fn emu_cycles(&mut self, cycles: u32) {
         let mut timer = TIMER.lock().unwrap();
-        let mut ppu = PPU_INSTANCE.lock().unwrap();
         for _ in 0..cycles {
             for _ in 0..4 {
                 // ctx.ticks++;
                 // println!("call tick from CPU");
+
+                let mut ppu = PPU_INSTANCE.lock().unwrap();
                 timer.tick();
                 ppu.tick();
+                drop(ppu);
             }
             let mut bus = MAIN_BUS.lock().unwrap();
 

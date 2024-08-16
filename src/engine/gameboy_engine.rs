@@ -1,5 +1,3 @@
-#[path = "emu_debug.rs"]
-pub mod EmuDebug;
 #[path = "gb/bus.rs"]
 pub mod bus;
 #[path = "gb/cartridge.rs"]
@@ -8,6 +6,8 @@ pub mod cartridge;
 pub mod cpu;
 #[path = "gb/dma.rs"]
 pub mod dma;
+#[path = "gb/model/input.rs"]
+pub mod input;
 #[path = "gb/instruction.rs"]
 pub mod instruction;
 #[path = "gb/interrupts.rs"]
@@ -24,20 +24,17 @@ pub mod timer;
 use bus::Bus;
 use cartridge::Cartridge;
 use cpu::CPU;
+use rendering::Renderer;
 
 use crate::libs::gameboy::ppu::PPU_INSTANCE;
 use fps_counter::FPSCounter;
-use io::lcd::LCD_INSTANCE;
-use ppu::PPU;
-use rendering::Renderer;
 use std::sync::atomic::AtomicU32;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::thread::{self, sleep};
+use std::thread::{self};
 use std::time::{Duration, Instant, SystemTime};
-use EmuDebug::EMU_DEBUG;
 
 pub struct GameBoyEngine {
     pub paused: Arc<AtomicBool>,
@@ -110,18 +107,20 @@ impl GameBoyEngine {
 
         let mut frame_start = Instant::now();
         while self.running.load(Ordering::Relaxed) {
-            let ppu = PPU_INSTANCE.lock().unwrap();
-            // if ppu.have_update() {
-            if true {
+            let mut ppu = PPU_INSTANCE.lock().unwrap();
+            if ppu.have_update() {
+                // if true {
                 // calc FPS...
-
                 let video_buffer = ppu.get_video_buffer();
                 let debug_ram = ppu.vram;
                 drop(ppu);
-                self.ui.update(video_buffer, debug_ram); // Handle UI updates
 
+                let input = self.ui.update(video_buffer, debug_ram); // Handle UI updates
+                let input = input as u8;
+                println!("input: {input:b}");
+                CPU::request_interrupt(interrupts::InterruptType::JOYPAD);
                 let elapsed = frame_start.elapsed();
-                let mut sleep_time = Duration::default();
+                let sleep_time: Duration;
                 if elapsed < frame_duration {
                     sleep_time = frame_duration - elapsed;
                     // println!("sleeping {sleep_time:?}");
@@ -130,7 +129,8 @@ impl GameBoyEngine {
                 // let fps = fps.tick();
                 let fps = fps.tick();
                 // Update and print FPS
-                println!("FPS: {fps}. Frame duration: {elapsed:?}. Slept {sleep_time:?}",);
+                println!("FPS: {fps}",);
+                // println!("FPS: {fps}. Frame duration: {elapsed:?}. Slept {sleep_time:?}",);
 
                 // self.current_frame = self.current_frame.wrapping_add(1);
 
@@ -165,7 +165,7 @@ impl GameBoyEngine {
             if self.ui.exited {
                 self.running.store(false, Ordering::Relaxed);
             }
-            // thread::yield_now();
+            thread::yield_now();
         }
         // Wait for CPU thread to finish
         cpu_thread.join().unwrap();

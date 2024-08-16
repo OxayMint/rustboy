@@ -3,7 +3,7 @@ use std::{
     sync::Mutex,
     time::Duration,
 };
-
+// use crate::GameBoyEngine::
 use sdl2::{
     event::Event,
     keyboard::Keycode,
@@ -11,7 +11,7 @@ use sdl2::{
     rect::{Point, Rect},
 };
 
-use super::{bus::Bus, io::lcd::COLORS};
+use super::{bus::Bus, input::Input, io::lcd::COLORS};
 pub static SCALE: i32 = 2;
 
 static RENDER_TICKS: Mutex<u64> = Mutex::new(0);
@@ -52,15 +52,21 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn update(&mut self, buffer: Vec<Color>, debug_vram: [u8; 8192]) {
+    pub fn update(&mut self, buffer: Vec<Color>, debug_vram: [u8; 8192]) -> Input {
         if let Some(canvas) = &mut self.canvas {
             canvas.set_draw_color(COLORS[0]);
             canvas.clear();
         }
 
+        self.draw_main(buffer);
+        self.update_debug_window(debug_vram);
+        if let Some(canvas) = &mut self.canvas {
+            canvas.present();
+        }
+        let mut input = Input::None;
         if let Some(event_pump) = &mut self.event_pump {
             for event in event_pump.poll_iter() {
-                match event {
+                input = match event {
                     Event::Quit { .. }
                     | Event::KeyDown {
                         keycode: Some(Keycode::Escape),
@@ -69,15 +75,43 @@ impl Renderer {
                         self.exited = true;
                         break;
                     }
-                    _ => {}
+                    Event::KeyDown {
+                        keycode: Some(Keycode::Z),
+                        ..
+                    } => Input::A,
+                    Event::KeyDown {
+                        keycode: Some(Keycode::X),
+                        ..
+                    } => Input::B,
+                    Event::KeyDown {
+                        keycode: Some(Keycode::SPACE),
+                        ..
+                    } => Input::Start,
+                    Event::KeyDown {
+                        keycode: Some(Keycode::V),
+                        ..
+                    } => Input::Select,
+                    Event::KeyDown {
+                        keycode: Some(Keycode::UP),
+                        ..
+                    } => Input::Up,
+                    Event::KeyDown {
+                        keycode: Some(Keycode::DOWN),
+                        ..
+                    } => Input::Down,
+                    Event::KeyDown {
+                        keycode: Some(Keycode::LEFT),
+                        ..
+                    } => Input::Left,
+                    Event::KeyDown {
+                        keycode: Some(Keycode::RIGHT),
+                        ..
+                    } => Input::Right,
+                    _ => Input::None,
                 }
             }
         }
-        self.draw_main(buffer);
-        self.update_debug_window(debug_vram);
-        if let Some(canvas) = &mut self.canvas {
-            canvas.present();
-        }
+        input
 
         // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
 

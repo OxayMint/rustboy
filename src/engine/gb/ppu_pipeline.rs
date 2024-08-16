@@ -51,12 +51,14 @@ impl PPU {
     fn fetch_sprite_pixels(&self, col: Color, bg_col_index: u8, lcd: &LCD) -> Color {
         let mut result_color: Color = col;
         for (index, entry) in self.fetched_entries.iter().enumerate() {
-            let obj_x = ((entry.x - 8) + (lcd.scroll_x % 8)) as usize;
-            if obj_x + 8 < self.pf_control.fifo_x {
+            let cur_x_pos = self.pf_control.fifo_x as i32;
+
+            let obj_x = (entry.x as i32 - 8) + (lcd.scroll_x as i32 % 8);
+            if obj_x + 8 < cur_x_pos {
                 continue;
             }
-            let offset = self.pf_control.fifo_x.wrapping_sub(obj_x);
-            if offset > 7 {
+            let offset = cur_x_pos - obj_x;
+            if offset > 7 || offset < 0 {
                 continue;
             }
             let bit = if entry.x_flipped() {
@@ -69,6 +71,7 @@ impl PPU {
             let b2 = self.pf_control.fetch_entry_data[(index * 2) + 1];
             let low = b1 >> bit & 1;
             let hi = (b2 >> bit & 1) << 1;
+
             let col_idx = (hi | low) as usize;
             if col_idx == 0 {
                 //transparent pixel

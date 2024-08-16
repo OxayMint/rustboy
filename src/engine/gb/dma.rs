@@ -20,7 +20,7 @@ impl DMA {
 
     pub fn start(&mut self, start: u8) {
         // println!("dma start");
-        self.active = false;
+        self.active = true;
         self.byte_address = 0;
         self.start_delay = 2;
         self.value = start;

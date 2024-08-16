@@ -102,11 +102,11 @@ impl Bus {
             0xC000..0xE000 => self.wram_write(address, value),
             0xE000..0xFE00 => {}
             0xFE00..0xFEA0 => {
-                let lcd = LCD_INSTANCE.lock().unwrap();
-                if lcd.dma_active() {
-                    return;
-                }
-                drop(lcd);
+                // let lcd = LCD_INSTANCE.lock().unwrap();
+                // if lcd.dma_active() {
+                //     return;
+                // }
+                // drop(lcd);
                 let mut ppu = PPU_INSTANCE.lock().unwrap();
                 ppu.oam_write(address, value)
             }
