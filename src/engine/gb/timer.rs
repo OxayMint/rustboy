@@ -1,11 +1,4 @@
-use lazy_static::lazy_static;
-use std::{ops::AddAssign, process::exit, sync::Mutex};
-
 use super::{cpu::CPU, interrupts::InterruptType};
-
-lazy_static! {
-    pub static ref TIMER: Mutex<Timer> = Mutex::new(Timer::new());
-}
 
 pub struct Timer {
     div: u16,         // FF04 - Divider register
@@ -17,7 +10,7 @@ pub struct Timer {
 }
 
 impl Timer {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Timer {
             div: 0xAC00,
             tima: 0,
@@ -82,21 +75,4 @@ impl Timer {
         self.div_cycles = 0;
         self.tima_cycles = 0;
     }
-}
-
-// Helper functions to easily access the timer
-pub fn tick_timer() {
-    TIMER.lock().unwrap().tick()
-}
-
-pub fn read_timer_byte(address: usize) -> u8 {
-    TIMER.lock().unwrap().read_byte(address)
-}
-
-pub fn write_timer_byte(address: usize, value: u8) {
-    TIMER.lock().unwrap().write_byte(address, value)
-}
-
-pub fn reset_timer() {
-    TIMER.lock().unwrap().reset()
 }

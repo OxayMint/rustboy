@@ -15,12 +15,12 @@ impl PPU {
             self.pixel_fifo_pop();
         }
     }
-    pub fn pipeline_fifo_add(&mut self, lcd: &LCD) -> bool {
+    pub fn pipeline_fifo_add(&mut self) -> bool {
         if self.pf_control.pixel_fifo.len() > 8 {
             return false;
         }
         let x: i32 = (self.pf_control.fetch_x as i32)
-            .wrapping_sub(8 - (lcd.scroll_x.wrapping_rem(8) as i32));
+            .wrapping_sub(8 - (self.lcd.scroll_x.wrapping_rem(8) as i32));
 
         for i in 0..8 {
             let bit = 7 - i;
@@ -32,12 +32,12 @@ impl PPU {
 
             let mut col = COLORS[(hi | low) as usize];
 
-            if lcd.lcdc_bgw_enabled() {
-                col = lcd.bg_colors[0];
+            if self.lcd.lcdc_bgw_enabled() {
+                col = self.lcd.bg_colors[0];
             }
 
-            if lcd.lcdc_obj_enabled() {
-                col = self.fetch_sprite_pixels(col, hi | low, lcd);
+            if self.lcd.lcdc_obj_enabled() {
+                col = self.fetch_sprite_pixels(col, hi | low);
             }
             if x >= 0 {
                 self.pixel_fifo_push(col);
@@ -48,12 +48,12 @@ impl PPU {
         return true;
     }
 
-    fn fetch_sprite_pixels(&self, col: Color, bg_col_index: u8, lcd: &LCD) -> Color {
+    fn fetch_sprite_pixels(&self, col: Color, bg_col_index: u8) -> Color {
         let mut result_color: Color = col;
         for (index, entry) in self.fetched_entries.iter().enumerate() {
             let cur_x_pos = self.pf_control.fifo_x as i32;
 
-            let obj_x = (entry.x as i32 - 8) + (lcd.scroll_x as i32 % 8);
+            let obj_x = (entry.x as i32 - 8) + (self.lcd.scroll_x as i32 % 8);
             if obj_x + 8 < cur_x_pos {
                 continue;
             }
@@ -79,9 +79,9 @@ impl PPU {
             }
             if !entry.draw_under_bg() || bg_col_index == 0 {
                 result_color = if entry.palette() == 0 {
-                    lcd.obj0_colors[col_idx]
+                    self.lcd.obj0_colors[col_idx]
                 } else {
-                    lcd.obj1_colors[col_idx]
+                    self.lcd.obj1_colors[col_idx]
                 };
                 if col_idx > 0 {
                     break;
@@ -97,44 +97,44 @@ impl PPU {
     pub fn pixel_fifo_pop(&mut self) -> Option<Color> {
         self.pf_control.pixel_fifo.pop_front()
     }
-    pub fn pipeline_fetch(&mut self, lcd: &mut LCD) {
+    pub fn pipeline_fetch(&mut self) {
         match self.pf_control.cur_fetch_state {
             super::FetchState::TILE => {
                 self.fetched_entries.clear();
 
-                if !lcd.lcdc_bgw_enabled() {
-                    let bg_map_start = lcd.lcdc_bg_map_area();
+                if !self.lcd.lcdc_bgw_enabled() {
+                    let bg_map_start = self.lcd.lcdc_bg_map_area();
                     self.pf_control.bgw_fetch_data[0] = self.vram_read(
                         bg_map_start
                             + (self.pf_control.map_x.wrapping_div(8))
                             + ((self.pf_control.map_y.wrapping_div(8)).wrapping_mul(32)),
                     );
-                    if lcd.lcdc_bg_data_area() == 0x8800 {
+                    if self.lcd.lcdc_bg_data_area() == 0x8800 {
                         self.pf_control.bgw_fetch_data[0] =
                             self.pf_control.bgw_fetch_data[0].wrapping_add(128);
                     }
                 }
 
-                if lcd.lcdc_obj_enabled() && !self.line_entries.is_empty() {
-                    self.pipeline_load_sprite_tile(lcd);
+                if self.lcd.lcdc_obj_enabled() && !self.line_entries.is_empty() {
+                    self.pipeline_load_sprite_tile();
                 }
 
                 self.pf_control.cur_fetch_state = FetchState::DATA0;
                 self.pf_control.fetch_x.add_assign(8);
             }
             super::FetchState::DATA0 => {
-                let idx = lcd.lcdc_bg_data_area().wrapping_add(
+                let idx = self.lcd.lcdc_bg_data_area().wrapping_add(
                     ((self.pf_control.bgw_fetch_data[0] as usize).wrapping_mul(16))
                         .wrapping_add(self.pf_control.tile_y),
                 );
                 self.pf_control.bgw_fetch_data[1] = self.vram_read(idx);
 
-                self.pipeline_load_sprite_data(0, lcd);
+                self.pipeline_load_sprite_data(0);
 
                 self.pf_control.cur_fetch_state = FetchState::DATA1;
             }
             super::FetchState::DATA1 => {
-                let data_start = lcd.lcdc_bg_data_area();
+                let data_start = self.lcd.lcdc_bg_data_area();
                 self.pf_control.bgw_fetch_data[2] = self.vram_read(
                     data_start.wrapping_add(
                         ((self.pf_control.bgw_fetch_data[0] as usize).wrapping_mul(16))
@@ -149,7 +149,7 @@ impl PPU {
                 // );
                 // }
 
-                self.pipeline_load_sprite_data(1, lcd);
+                self.pipeline_load_sprite_data(1);
 
                 self.pf_control.cur_fetch_state = FetchState::SLEEP;
             }
@@ -157,36 +157,36 @@ impl PPU {
                 self.pf_control.cur_fetch_state = FetchState::PUSH;
             }
             super::FetchState::PUSH => {
-                if self.pipeline_fifo_add(lcd) {
+                if self.pipeline_fifo_add() {
                     self.pf_control.cur_fetch_state = FetchState::TILE;
                 }
             }
         }
     }
 
-    pub fn pipeline_process(&mut self, lcd: &mut LCD) {
-        self.pf_control.map_y = lcd.ly as usize + lcd.scroll_y as usize;
-        self.pf_control.map_x = self.pf_control.fetch_x as usize + lcd.scroll_x as usize;
+    pub fn pipeline_process(&mut self) {
+        self.pf_control.map_y = self.lcd.ly as usize + self.lcd.scroll_y as usize;
+        self.pf_control.map_x = self.pf_control.fetch_x as usize + self.lcd.scroll_x as usize;
         if self.pf_control.map_x > 255 {
             self.pf_control.map_x.sub_assign(255);
         }
         self.pf_control.tile_y =
-            (lcd.scroll_y.wrapping_add(self.pf_control.map_y as u8) as usize % 8) * 2;
+            (self.lcd.scroll_y.wrapping_add(self.pf_control.map_y as u8) as usize % 8) * 2;
 
         if self.pf_control.map_y >= 256 {
             self.pf_control.map_y.sub_assign(256);
         }
         if self.line_ticks & 1 == 0 {
-            self.pipeline_fetch(lcd);
+            self.pipeline_fetch();
         }
-        self.pipeline_push_pixel(lcd);
+        self.pipeline_push_pixel();
     }
 
-    pub fn pipeline_push_pixel(&mut self, lcd: &mut LCD) {
+    pub fn pipeline_push_pixel(&mut self) {
         if self.pf_control.pixel_fifo.len() > 8 {
             if let Some(pixel) = self.pixel_fifo_pop() {
-                if self.pf_control.line_x >= (lcd.scroll_x as usize % 8) {
-                    let idx = self.pf_control.pushed_x + (lcd.ly as usize * XRES as usize);
+                if self.pf_control.line_x >= (self.lcd.scroll_x as usize % 8) {
+                    let idx = self.pf_control.pushed_x + (self.lcd.ly as usize * XRES as usize);
                     self.video_buffer[idx] = pixel;
                     self.pf_control.pushed_x += 1;
                 }
@@ -194,9 +194,9 @@ impl PPU {
             self.pf_control.line_x += 1;
         }
     }
-    pub fn pipeline_load_sprite_tile(&mut self, lcd: &mut LCD) {
+    pub fn pipeline_load_sprite_tile(&mut self) {
         for entry in &self.line_entries {
-            let obj_x = entry.x as i32 - 8 + lcd.scroll_x as i32 % 8;
+            let obj_x = entry.x as i32 - 8 + self.lcd.scroll_x as i32 % 8;
             let cur_x = self.pf_control.fetch_x as i32;
             if (obj_x >= cur_x && obj_x < cur_x + 8)
                 || (obj_x + 8 >= cur_x && obj_x + 8 < cur_x + 8)
@@ -209,9 +209,9 @@ impl PPU {
         }
     }
 
-    fn pipeline_load_sprite_data(&mut self, offset: usize, lcd: &mut LCD) {
-        let cur_y = lcd.ly;
-        let obj_height = lcd.lcdc_obj_height();
+    fn pipeline_load_sprite_data(&mut self, offset: usize) {
+        let cur_y = self.lcd.ly;
+        let obj_height = self.lcd.lcdc_obj_height();
         for (index, entry) in self.fetched_entries.iter().enumerate() {
             let mut ty = (cur_y + 16 - entry.y) * 2;
             if entry.y_flipped() {
@@ -226,9 +226,9 @@ impl PPU {
         }
     }
 
-    pub fn load_line_sprites(&mut self, lcd: &mut LCD) {
-        let ly = lcd.ly;
-        let obj_height = lcd.lcdc_obj_height();
+    pub fn load_line_sprites(&mut self) {
+        let ly = self.lcd.ly;
+        let obj_height = self.lcd.lcdc_obj_height();
         self.line_entries.clear();
         for entry in self.oam_ram {
             if entry.x == 0 {

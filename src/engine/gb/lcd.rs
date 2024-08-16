@@ -22,10 +22,6 @@ pub static COLORS: [Color; 4] = [
     Color::RGB(0x00, 0x00, 0x00),
 ];
 
-lazy_static! {
-    pub static ref LCD_INSTANCE: Mutex<LCD> = Mutex::new(LCD::new());
-}
-
 pub enum StatType {
     HBLANK = (1 << 3),
     VBLANK = (1 << 4),
@@ -80,7 +76,7 @@ pub struct LCD {
 }
 
 impl LCD {
-    fn new() -> Self {
+    pub fn new() -> Self {
         return LCD {
             lcdc: 0x91,
             lcds: 0,
@@ -189,7 +185,7 @@ impl LCD {
         return self.dma.active;
     }
 
-    pub fn read(&mut self, address: usize) -> u8 {
+    pub fn read(&self, address: usize) -> u8 {
         match address {
             0xff40 => self.lcdc,
             0xff41 => self.lcds,

@@ -1,5 +1,3 @@
-use crate::libs::gameboy::bus::Bus;
-
 use super::{AddressMode, ConditionType, InstructionType, RegisterType, CPU};
 
 impl CPU {
@@ -139,11 +137,12 @@ impl CPU {
             InstructionType::LD => {
                 if self.destination_is_mem {
                     if self.current_instruction.register_2 >= RegisterType::AF {
-                        Bus::write8(self.mem_dest, self.fetched_data as u8);
+                        self.bus.write8(self.mem_dest, self.fetched_data as u8);
                         self.emu_cycles(1);
-                        Bus::write8(self.mem_dest + 1, (self.fetched_data >> 8) as u8);
+                        self.bus
+                            .write8(self.mem_dest + 1, (self.fetched_data >> 8) as u8);
                     } else {
-                        Bus::write(self.mem_dest as usize, self.fetched_data);
+                        self.bus.write16(self.mem_dest as usize, self.fetched_data);
                     }
                     self.emu_cycles(1);
                     return 0;
@@ -179,9 +178,9 @@ impl CPU {
                     && self.current_instruction.address_mode == AddressMode::MR
                 {
                     let hl_val = self.read_reg(&RegisterType::HL);
-                    new_val = Bus::read(hl_val as usize).wrapping_add(1);
+                    new_val = self.bus.read16(hl_val as usize).wrapping_add(1);
                     new_val &= 0xFF;
-                    Bus::write(hl_val as usize, new_val);
+                    self.bus.write16(hl_val as usize, new_val);
                 } else {
                     self.set_reg(self.current_instruction.register_1.clone(), new_val);
                     new_val = self.read_reg(&self.current_instruction.register_1);
@@ -202,7 +201,7 @@ impl CPU {
                     self.regs.sp = new_val
                 } else {
                     if self.destination_is_mem {
-                        Bus::write(self.mem_dest, new_val);
+                        self.bus.write16(self.mem_dest, new_val);
                     } else {
                         self.set_reg(self.current_instruction.register_1.clone(), new_val);
                     }
@@ -444,9 +443,9 @@ impl CPU {
                 // );
             }
             InstructionType::POP => {
-                let low = Bus::stack_pop8(&mut self.regs.sp);
+                let low = self.bus.stack_pop8(&mut self.regs.sp);
                 self.emu_cycles(1);
-                let hi = Bus::stack_pop8(&mut self.regs.sp);
+                let hi = self.bus.stack_pop8(&mut self.regs.sp);
                 self.emu_cycles(1);
                 let reg = self.current_instruction.register_1.clone();
                 self.set_reg(reg, ((hi as u16) << 8) | low as u16);
@@ -464,11 +463,11 @@ impl CPU {
             InstructionType::PUSH => {
                 let hi = (self.fetched_data >> 8) as u8;
                 self.emu_cycles(1);
-                Bus::stack_push8(&mut self.regs.sp, hi);
+                self.bus.stack_push8(&mut self.regs.sp, hi);
 
                 let low = (self.fetched_data) as u8;
                 self.emu_cycles(1);
-                Bus::stack_push8(&mut self.regs.sp, low);
+                self.bus.stack_push8(&mut self.regs.sp, low);
 
                 self.emu_cycles(1);
             }
@@ -477,9 +476,9 @@ impl CPU {
                     self.emu_cycles(1);
                 }
                 if self.check_condition() {
-                    let low = Bus::stack_pop8(&mut self.regs.sp);
+                    let low = self.bus.stack_pop8(&mut self.regs.sp);
                     self.emu_cycles(1);
-                    let hi = Bus::stack_pop8(&mut self.regs.sp);
+                    let hi = self.bus.stack_pop8(&mut self.regs.sp);
                     self.emu_cycles(1);
                     let addr = ((hi as u16) << 8) | low as u16;
                     self.regs.pc = addr;
@@ -494,9 +493,9 @@ impl CPU {
                     self.emu_cycles(1);
                 }
                 if self.check_condition() {
-                    let low = Bus::stack_pop8(&mut self.regs.sp);
+                    let low = self.bus.stack_pop8(&mut self.regs.sp);
                     self.emu_cycles(1);
-                    let hi = Bus::stack_pop8(&mut self.regs.sp);
+                    let hi = self.bus.stack_pop8(&mut self.regs.sp);
                     self.emu_cycles(1);
                     let addr = ((hi as u16) << 8) | low as u16;
                     self.regs.pc = addr;
@@ -506,10 +505,10 @@ impl CPU {
             InstructionType::LDH => {
                 if self.current_instruction.register_1 == RegisterType::A {
                     let address = (0xFF00 | self.fetched_data) as usize;
-                    let val = Bus::read8(address);
+                    let val = self.bus.read8(address);
                     self.cpu_set_reg8(self.current_instruction.register_1.clone(), val);
                 } else {
-                    Bus::write8(self.mem_dest, self.regs.a);
+                    self.bus.write8(self.mem_dest, self.regs.a);
                 }
                 self.emu_cycles(1);
             }
@@ -551,7 +550,7 @@ impl CPU {
         if self.check_condition() {
             if push_pc {
                 self.emu_cycles(2);
-                Bus::stack_push16(&mut self.regs.sp, self.regs.pc);
+                self.bus.stack_push16(&mut self.regs.sp, self.regs.pc);
             }
             self.regs.pc = addr;
             self.emu_cycles(1);
@@ -648,7 +647,7 @@ impl CPU {
             RegisterType::F => self.regs.f,
             RegisterType::HL => {
                 let address = self.read_reg(&RegisterType::HL);
-                Bus::read8(address as usize)
+                self.bus.read8(address as usize)
             }
             _ => panic!("Invalid 8-bit register type: {:?}", rt),
         }
@@ -663,7 +662,9 @@ impl CPU {
             RegisterType::H => self.regs.h = val,
             RegisterType::L => self.regs.l = val,
             RegisterType::F => self.regs.f = val & 0xF0, // Ensure lower 4 bits are always 0
-            RegisterType::HL => Bus::write8(self.read_reg(&RegisterType::HL) as usize, val),
+            RegisterType::HL => self
+                .bus
+                .write8(self.read_reg(&RegisterType::HL) as usize, val),
             _ => panic!("Invalid 8-bit register type: {:?}", rt),
         }
     }

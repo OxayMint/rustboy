@@ -4,14 +4,13 @@ pub mod execute;
 pub mod fetch;
 #[path = "cpu_interrupts.rs"]
 pub mod interrupts;
-use super::bus::{Bus, MAIN_BUS};
 use super::instruction::*;
 use super::interrupts::InterruptType;
-use super::ppu::{PPU, PPU_INSTANCE};
-use super::timer::{tick_timer, TIMER};
+use super::Bus;
+
 // use super::
 use std::ops::AddAssign;
-use std::process::exit;
+
 use std::sync::Mutex;
 
 lazy_static::lazy_static! {
@@ -26,6 +25,7 @@ pub struct CPU {
     pub current_instruction: Instruction,
     pub int_master_enabled: bool,
     pub ime_enabling: bool,
+    pub bus: Bus,
     af_count: u32,
 }
 
@@ -54,7 +54,7 @@ impl Registers {
 }
 
 impl CPU {
-    pub fn new() -> Self {
+    pub fn new(bus: Bus) -> Self {
         CPU {
             regs: Registers::new(),
             fetched_data: 0,
@@ -64,7 +64,7 @@ impl CPU {
             int_master_enabled: false,
             ime_enabling: false,
             af_count: 0,
-
+            bus: bus,
             current_instruction: Instruction {
                 ..Default::default()
             },
@@ -75,14 +75,14 @@ impl CPU {
         // println!("cpu step");
         let mut res = 0i8;
         if !self.halted {
-            let opcode: u8 = Bus::read8(self.regs.pc as usize);
+            let opcode: u8 = self.bus.read8(self.regs.pc as usize);
             let pc = self.regs.pc.clone();
             self.current_instruction = Instruction::from_opcode(&opcode);
             self.increment_pointer(1);
             self.destination_is_mem = false;
 
-            let following_byte = Bus::read8((self.regs.pc) as usize);
-            let third_byte = Bus::read8((self.regs.pc + 1) as usize);
+            let following_byte = self.bus.read8((self.regs.pc) as usize);
+            let third_byte = self.bus.read8((self.regs.pc + 1) as usize);
             // res = format!("A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}\n",
             //     self.regs.a,
             //     self.regs.f,
@@ -94,10 +94,10 @@ impl CPU {
             //     self.regs.l,
             //     self.regs.sp,
             //     pc,
-            //     Bus::read(pc as usize),
-            //     Bus::read(pc as usize + 1),
-            //     Bus::read(pc as usize + 2),
-            //     Bus::read(pc as usize + 3),
+            //     self.bus.read(pc as usize),
+            //     self.bus.read(pc as usize + 1),
+            //     self.bus.read(pc as usize + 2),
+            //     self.bus.read(pc as usize + 3),
             // );
             // println!(
             //     "{:04X} {} ({:02X} {:02X} {:02X}) A:{:02X} F:{} BC:{:02X}{:02X} DE:{:02X}{:02X} HL:{:02X}{:02X} SP: {:04X}",
@@ -144,20 +144,15 @@ impl CPU {
         return res;
     }
     pub fn emu_cycles(&mut self, cycles: u32) {
-        let mut timer = TIMER.lock().unwrap();
         for _ in 0..cycles {
             for _ in 0..4 {
                 // ctx.ticks++;
                 // println!("call tick from CPU");
 
-                let mut ppu = PPU_INSTANCE.lock().unwrap();
-                timer.tick();
-                ppu.tick();
-                drop(ppu);
+                self.bus.timer.tick();
+                self.bus.ppu.tick();
             }
-            let mut bus = MAIN_BUS.lock().unwrap();
-
-            bus.dma_tick();
+            self.bus.dma_tick();
         }
     }
 

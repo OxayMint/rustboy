@@ -1,4 +1,4 @@
-use crate::libs::gameboy::{bus::Bus, interrupts::InterruptType};
+use crate::libs::gameboy::interrupts::InterruptType;
 
 use super::{CPU, INT_FLAGS};
 
@@ -22,7 +22,7 @@ impl CPU {
     }
 
     fn int_check(&mut self, flags: &mut u8, addr: u16, int_type: InterruptType) -> bool {
-        if (*flags & int_type as u8) > 0 && (Bus::get_ie_register() & int_type as u8) > 0 {
+        if (*flags & int_type as u8) > 0 && (self.bus.get_ie_register() & int_type as u8) > 0 {
             self.int_handle(addr);
             *flags &= !(int_type as u8);
             self.halted = false;
@@ -33,7 +33,7 @@ impl CPU {
         }
     }
     fn int_handle(&mut self, addr: u16) {
-        Bus::stack_push16(&mut self.regs.sp, self.regs.pc);
+        self.bus.stack_push16(&mut self.regs.sp, self.regs.pc);
         self.regs.pc = addr;
     }
 }

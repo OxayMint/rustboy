@@ -8,7 +8,7 @@ build = "./src/build.rs"
 sdl2 = "*"
 miniquad = "0.4.5"
 byteorder = "1.4"
-lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 fps_counter = "3.0.0"
+lazy_static = "1.5.0"
 
 

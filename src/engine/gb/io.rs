@@ -1,11 +1,7 @@
 #[path = "lcd.rs"]
 pub mod lcd;
-use lcd::{LCD, LCD_INSTANCE};
 
-use super::{
-    cpu::INT_FLAGS,
-    timer::{read_timer_byte, write_timer_byte},
-};
+use super::{cpu::INT_FLAGS, timer::Timer};
 
 pub struct IO_Ram {
     // pub ram: [u8; 0x80],
@@ -27,9 +23,7 @@ impl IO_Ram {
             0xFF00 => self.input = value,
             0xFF01 => self.serial_data[0] = value,
             0xFF02 => self.serial_data[1] = value,
-            0xFF04..=0xFF07 => write_timer_byte(address, value),
             0xFF0F => *INT_FLAGS.lock().unwrap() = value,
-            0xFF40..=0xFF4B => LCD_INSTANCE.lock().unwrap().write(address, value),
             _ => {}
         }
     }
@@ -39,8 +33,6 @@ impl IO_Ram {
             0xFF01 => self.serial_data[0],
             0xFF02 => self.serial_data[1],
             0xFF0F => *INT_FLAGS.lock().unwrap(),
-            0xFF04..=0xFF07 => read_timer_byte(address),
-            0xFF40..=0xFF4B => LCD_INSTANCE.lock().unwrap().read(address),
             _ => 0,
         }
     }

@@ -6,18 +6,12 @@ pub mod ppu_models;
 pub mod ppu_pipeline;
 #[path = "ppu_sm.rs"]
 pub mod ppu_sm;
-use lazy_static::lazy_static;
+use std::time::{Duration, Instant};
 
 use ppu_models::*;
 use sdl2::pixels::Color;
 
-use std::{alloc::System, sync::Mutex, time::SystemTime};
-
-lazy_static! {
-    pub static ref PPU_INSTANCE: Mutex<PPU> = Mutex::new(PPU::new());
-}
-
-use super::io::lcd::{Mode, COLORS, LCD_INSTANCE};
+use super::io::lcd::{Mode, COLORS, LCD};
 
 pub static LINES_PER_FRAME: u8 = 154;
 pub static TICKS_PER_LINE: u16 = 456;
@@ -26,45 +20,46 @@ pub static XRES: u8 = 160;
 pub struct PPU {
     pub oam_ram: [OamEntry; 40],
     pub vram: [u8; 0x2000],
+    pub lcd: LCD,
     pub line_entries: Vec<OamEntry>,
     pub fetched_entries: Vec<OamEntry>,
     pub line_ticks: u16,
     pub video_buffer: [Color; 144 * 160],
     pub pf_control: PixelFifo,
     pub have_update: bool,
+    pub last_frame_end: Instant,
+    pub frame_duration: Duration,
 }
 
 impl PPU {
     pub fn new() -> PPU {
-        let mut lcd = LCD_INSTANCE.lock().unwrap();
-        lcd.lcds_mode_set(Mode::OAM);
-        drop(lcd);
         PPU {
             oam_ram: [OamEntry::empty(); 40],
             vram: [0; 0x2000],
+            lcd: LCD::new(),
             line_ticks: 0,
             line_entries: vec![],
             fetched_entries: vec![],
-            // video_buffer: HashMap::new(),
             video_buffer: [COLORS[0]; 144 * 160],
             pf_control: PixelFifo::new(),
             have_update: false,
+            last_frame_end: Instant::now(),
+            frame_duration: Duration::from_secs_f64(1.0 / 60.0),
         }
     }
 
     pub fn tick(&mut self) {
         self.line_ticks = self.line_ticks.wrapping_add(1);
-        let mut lcd = LCD_INSTANCE.lock().unwrap();
         // println!(
         //     "ppu tick. mode: {:?}, tick: {}",
         //     lcd.lcds_mode(),
         //     self.line_ticks
         // );
-        match lcd.lcds_mode() {
-            Mode::OAM => self.mode_oam(&mut lcd),
-            Mode::HBlank => self.mode_hblank(&mut lcd),
-            Mode::VBlank => self.mode_vblank(&mut lcd),
-            Mode::XFER => self.mode_xfer(&mut lcd),
+        match self.lcd.lcds_mode() {
+            Mode::OAM => self.mode_oam(),
+            Mode::HBlank => self.mode_hblank(),
+            Mode::VBlank => self.mode_vblank(),
+            Mode::XFER => self.mode_xfer(),
         }
         // match Bus::
         // let lcd = Bus::
@@ -81,7 +76,7 @@ impl PPU {
     }
 
     pub fn oam_write(&mut self, address: usize, value: u8) {
-        if(address == 0xfe00&& value>0){
+        if (address == 0xfe00 && value > 0) {
             println!("dfsdf")
         }
         let adjusted_address = if address >= 0xFE00 {

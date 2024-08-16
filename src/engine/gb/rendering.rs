@@ -11,10 +11,9 @@ use sdl2::{
     rect::{Point, Rect},
 };
 
-use super::{bus::Bus, input::Input, io::lcd::COLORS};
-pub static SCALE: i32 = 2;
+use super::{input::Input, io::lcd::COLORS};
+pub static SCALE: u32 = 3;
 
-static RENDER_TICKS: Mutex<u64> = Mutex::new(0);
 pub struct Renderer {
     // pub tick: u64,
     pub exited: bool,
@@ -36,7 +35,7 @@ impl Renderer {
         let sdl_context = sdl2::init()?;
         let video_subsystem = sdl_context.video()?;
         let window = video_subsystem
-            .window("Rustboy", 160 * 2 + (128 * 2), 256 * 2)
+            .window("Rustboy", 160 * SCALE, 256 * SCALE)
             .position_centered()
             .opengl()
             .build()
@@ -46,20 +45,20 @@ impl Renderer {
             canvas.set_draw_color(Color::BLACK);
             canvas.clear();
             canvas.present();
-            _ = canvas.set_scale(2.0, 2.0);
+            _ = canvas.set_scale(3.0, 3.0);
         }
         self.event_pump = Some(sdl_context.event_pump()?);
         Ok(())
     }
 
-    pub fn update(&mut self, buffer: Vec<Color>, debug_vram: [u8; 8192]) -> Input {
+    pub fn update(&mut self, buffer: Vec<Color>) -> Input {
         if let Some(canvas) = &mut self.canvas {
             canvas.set_draw_color(COLORS[0]);
             canvas.clear();
         }
 
         self.draw_main(buffer);
-        self.update_debug_window(debug_vram);
+        // self.update_debug_window(debug_vram);
         if let Some(canvas) = &mut self.canvas {
             canvas.present();
         }
