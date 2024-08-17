@@ -7,20 +7,20 @@ use sdl2::pixels::Color;
 
 use crate::libs::gameboy::{cpu::CPU, dma::DMA, interrupts::InterruptType};
 
-// //E1F8CF
-// Color::RGB(0xE1, 0xF8, 0xCF),
-// //87C06C
-// Color::RGB(0x87, 0xC0, 0x6C),
-// //2F6850
-// Color::RGB(0x2F, 0x68, 0x50),
-// //071821
-// Color::RGB(0x07, 0x18, 0x21),
 pub static COLORS: [Color; 4] = [
-    Color::WHITE,
-    Color::RGB(0xAA, 0xAA, 0xAA),
-    Color::RGB(0x55, 0x55, 0x55),
-    Color::RGB(0x00, 0x00, 0x00),
+    //E1F8CF
+    Color::RGB(0xE1, 0xF8, 0xCF),
+    //87C06C
+    Color::RGB(0x87, 0xC0, 0x6C),
+    //2F6850
+    Color::RGB(0x2F, 0x68, 0x50),
+    //071821
+    Color::RGB(0x07, 0x18, 0x21),
 ];
+// Color::WHITE,
+// Color::RGB(0xAA, 0xAA, 0xAA),
+// Color::RGB(0x55, 0x55, 0x55),
+// Color::RGB(0x00, 0x00, 0x00),
 
 pub enum StatType {
     HBLANK = (1 << 3),
@@ -135,11 +135,11 @@ impl LCD {
         return (self.lcdc >> 5) & 1 > 0;
     }
     //    6: Window tile map area: 0 = 9800–9BFF; 1 = 9C00–9FFF
-    pub fn lcdc_window_tile_map_area(&self) -> (usize, usize) {
+    pub fn lcdc_window_tile_map_area(&self) -> usize {
         return if (self.lcdc >> 6) & 1 > 0 {
-            (0x9C00, 0x9FFF)
+            0x9C00
         } else {
-            (0x9800, 0x9BFF)
+            0x9800
         };
     }
     // 7: LCD & PPU enable: 0 = Off; 1 = On
@@ -203,25 +203,6 @@ impl LCD {
         }
     }
 
-    pub fn ly_increment(&mut self) {
-        // println!("incrementing ly {}", self.ly);
-        self.ly = self.ly.wrapping_add(1);
-        // println!("incremented ly {}", self.ly);
-
-        if self.ly as u8 == self.ly_compare {
-            self.lcds_lyc_set(true);
-            // println!("ly is ly compare");
-
-            if self.lcds_stat_int(StatType::LYC) {
-                // println!("stat is LYC, interrupting");
-                CPU::request_interrupt(InterruptType::LCD_STAT);
-            }
-            // println!("stat is not LYC");
-        } else {
-            // println!("ly is not ly compare");
-            self.lcds_lyc_set(false);
-        }
-    }
     pub fn write(&mut self, address: usize, value: u8) {
         match address {
             0xff40 => self.lcdc = value,
@@ -234,25 +215,53 @@ impl LCD {
                 self.dma_address = value;
                 self.dma.start(value);
             }
-            0xff47 => self.update_palette(value, 0),
-            0xff48 => self.update_palette(value & 0b11111100, 1),
-            0xff49 => self.update_palette(value & 0b11111100, 2),
+            0xff47 => {
+                self.bg_pallete = value;
+                self.update_palette(value, 0)
+            }
+            0xff48 => {
+                self.obj_pallete[0] = value;
+                self.update_palette(value & !0b11, 1);
+            }
+            0xff49 => {
+                self.obj_pallete[1] = value;
+                self.update_palette(value & !0b11, 2);
+            }
             0xff4a => self.win_y = value,
             0xff4b => self.win_x = value,
             _ => {}
         }
     }
     pub fn update_palette(&mut self, data: u8, palette: u8) {
-        let colors = match palette {
-            0x1 => &mut self.obj0_colors,
-            0x2 => &mut self.obj1_colors,
-            _ => &mut self.bg_colors,
+        println!("update palette {palette}: {data:b}");
+        // let colors = match palette {
+        //     1 => &mut self.obj0_colors,
+        //     2 => &mut self.obj1_colors,
+        //     _ => &mut self.bg_colors,
+        // };
+        // for i in 0..3 {
+        //     colors[i] = COLORS[(data >> (i * 2)) as usize & 0b11];
+        // }
+        match palette {
+            1 => {
+                self.obj0_colors[0] = COLORS[data as usize & 0b11];
+                self.obj0_colors[1] = COLORS[(data >> 2) as usize & 0b11];
+                self.obj0_colors[2] = COLORS[(data >> 4) as usize & 0b11];
+                self.obj0_colors[3] = COLORS[(data >> 6) as usize & 0b11];
+            }
+            2 => {
+                self.obj1_colors[0] = COLORS[data as usize & 0b11];
+                self.obj1_colors[1] = COLORS[(data >> 2) as usize & 0b11];
+                self.obj1_colors[2] = COLORS[(data >> 4) as usize & 0b11];
+                self.obj1_colors[3] = COLORS[(data >> 6) as usize & 0b11];
+            }
+            _ => {
+                self.bg_colors[0] = COLORS[data as usize & 0b11];
+                self.bg_colors[1] = COLORS[(data >> 2) as usize & 0b11];
+                self.bg_colors[2] = COLORS[(data >> 4) as usize & 0b11];
+                self.bg_colors[3] = COLORS[(data >> 6) as usize & 0b11];
+            }
         };
-
-        colors[0] = COLORS[data as usize & 0b11];
-        colors[1] = COLORS[(data >> 2) as usize & 0b11];
-        colors[2] = COLORS[(data >> 4) as usize & 0b11];
-        colors[3] = COLORS[(data >> 6) as usize & 0b11];
     }
 }
 

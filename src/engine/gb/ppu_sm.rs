@@ -1,4 +1,5 @@
 use std::{
+    ops::AddAssign,
     thread,
     time::{Duration, Instant},
 };
@@ -12,6 +13,31 @@ use crate::libs::gameboy::{
 use super::{LINES_PER_FRAME, PPU, TICKS_PER_LINE, XRES, YRES};
 
 impl PPU {
+    pub fn ly_increment(&mut self) {
+        if self.window_is_visible()
+            && self.lcd.ly >= self.lcd.win_y
+            && self.lcd.ly < (self.lcd.win_y as u16 + YRES as u16) as u8
+        {
+            self.window_line = self.window_line.wrapping_add(1);
+        }
+        // println!("incrementing ly {}", self.ly);
+        self.lcd.ly = self.lcd.ly.wrapping_add(1);
+        // println!("incremented ly {}", self.ly);
+
+        if self.lcd.ly as u8 == self.lcd.ly_compare {
+            self.lcd.lcds_lyc_set(true);
+            // println!("ly is ly compare");
+
+            if self.lcd.lcds_stat_int(StatType::LYC) {
+                // println!("stat is LYC, interrupting");
+                CPU::request_interrupt(InterruptType::LCD_STAT);
+            }
+            // println!("stat is not LYC");
+        } else {
+            // println!("ly is not ly compare");
+            self.lcd.lcds_lyc_set(false);
+        }
+    }
     pub fn mode_oam(&mut self) {
         if self.line_ticks >= 80 {
             self.lcd.lcds_mode_set(Mode::XFER);
@@ -39,11 +65,12 @@ impl PPU {
         // println!("mode {}", lcd.lcds_mode() as u8);
         // exit(0);
         if self.line_ticks >= TICKS_PER_LINE {
-            self.lcd.ly_increment();
+            self.ly_increment();
 
             if self.lcd.ly >= LINES_PER_FRAME {
                 self.lcd.lcds_mode_set(Mode::OAM);
                 self.lcd.ly = 0;
+                self.window_line = 0;
             }
 
             self.line_ticks = 0;
@@ -52,7 +79,7 @@ impl PPU {
 
     pub fn mode_hblank(&mut self) {
         if self.line_ticks >= TICKS_PER_LINE {
-            self.lcd.ly_increment();
+            self.ly_increment();
 
             if self.lcd.ly >= YRES {
                 self.lcd.lcds_mode_set(Mode::VBlank);

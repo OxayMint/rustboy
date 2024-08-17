@@ -20,6 +20,7 @@ pub static XRES: u8 = 160;
 pub struct PPU {
     pub oam_ram: [OamEntry; 40],
     pub vram: [u8; 0x2000],
+    pub window_line: u16,
     pub lcd: LCD,
     pub line_entries: Vec<OamEntry>,
     pub fetched_entries: Vec<OamEntry>,
@@ -38,6 +39,7 @@ impl PPU {
             vram: [0; 0x2000],
             lcd: LCD::new(),
             line_ticks: 0,
+            window_line: 0,
             line_entries: vec![],
             fetched_entries: vec![],
             video_buffer: [COLORS[0]; 144 * 160],

@@ -1,21 +1,16 @@
 use std::{
     ops::{AddAssign, SubAssign},
-    sync::Mutex,
-    time::Duration,
+    sync::{Arc, Mutex},
 };
 // use crate::GameBoyEngine::
-use sdl2::{
-    event::Event,
-    keyboard::Keycode,
-    pixels::Color,
-    rect::{Point, Rect},
-};
+use sdl2::{event::Event, keyboard::Keycode, pixels::Color, rect::Point};
 
 use super::{input::Input, io::lcd::COLORS};
 pub static SCALE: u32 = 3;
 
 pub struct Renderer {
     // pub tick: u64,
+    last_input: Input,
     pub exited: bool,
     event_pump: Option<sdl2::EventPump>,
     canvas: Option<sdl2::render::Canvas<sdl2::video::Window>>,
@@ -23,19 +18,21 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new() -> Self {
-        Renderer {
-            // tick: 0,
+        let mut renderer = Renderer {
+            last_input: Input::new(),
             exited: false,
             event_pump: None,
             canvas: None,
-        }
+        };
+        _ = renderer.init();
+        renderer
     }
 
     pub fn init(&mut self) -> Result<(), String> {
         let sdl_context = sdl2::init()?;
         let video_subsystem = sdl_context.video()?;
         let window = video_subsystem
-            .window("Rustboy", 160 * SCALE, 256 * SCALE)
+            .window("Rustboy", 160 * SCALE, 144 * SCALE)
             .position_centered()
             .opengl()
             .build()
@@ -51,7 +48,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn update(&mut self, buffer: Vec<Color>) -> Input {
+    pub fn update(&mut self, buffer: Vec<Color>) -> &Input {
         if let Some(canvas) = &mut self.canvas {
             canvas.set_draw_color(COLORS[0]);
             canvas.clear();
@@ -62,10 +59,9 @@ impl Renderer {
         if let Some(canvas) = &mut self.canvas {
             canvas.present();
         }
-        let mut input = Input::None;
         if let Some(event_pump) = &mut self.event_pump {
             for event in event_pump.poll_iter() {
-                input = match event {
+                match event {
                     Event::Quit { .. }
                     | Event::KeyDown {
                         keycode: Some(Keycode::Escape),
@@ -75,42 +71,36 @@ impl Renderer {
                         break;
                     }
                     Event::KeyDown {
-                        keycode: Some(Keycode::Z),
-                        ..
-                    } => Input::A,
-                    Event::KeyDown {
-                        keycode: Some(Keycode::X),
-                        ..
-                    } => Input::B,
-                    Event::KeyDown {
-                        keycode: Some(Keycode::SPACE),
-                        ..
-                    } => Input::Start,
-                    Event::KeyDown {
-                        keycode: Some(Keycode::V),
-                        ..
-                    } => Input::Select,
-                    Event::KeyDown {
-                        keycode: Some(Keycode::UP),
-                        ..
-                    } => Input::Up,
-                    Event::KeyDown {
-                        keycode: Some(Keycode::DOWN),
-                        ..
-                    } => Input::Down,
-                    Event::KeyDown {
-                        keycode: Some(Keycode::LEFT),
-                        ..
-                    } => Input::Left,
-                    Event::KeyDown {
-                        keycode: Some(Keycode::RIGHT),
-                        ..
-                    } => Input::Right,
-                    _ => Input::None,
+                        keycode: Some(key), ..
+                    } => match key {
+                        Keycode::Z => self.last_input.A = true,
+                        Keycode::X => self.last_input.B = true,
+                        Keycode::SPACE => self.last_input.Start = true,
+                        Keycode::V => self.last_input.Select = true,
+                        Keycode::UP => self.last_input.Up = true,
+                        Keycode::DOWN => self.last_input.Down = true,
+                        Keycode::LEFT => self.last_input.Left = true,
+                        Keycode::RIGHT => self.last_input.Right = true,
+                        _ => {}
+                    },
+                    Event::KeyUp {
+                        keycode: Some(key), ..
+                    } => match key {
+                        Keycode::Z => self.last_input.A = false,
+                        Keycode::X => self.last_input.B = false,
+                        Keycode::SPACE => self.last_input.Start = false,
+                        Keycode::V => self.last_input.Select = false,
+                        Keycode::UP => self.last_input.Up = false,
+                        Keycode::DOWN => self.last_input.Down = false,
+                        Keycode::LEFT => self.last_input.Left = false,
+                        Keycode::RIGHT => self.last_input.Right = false,
+                        _ => {}
+                    },
+                    _ => {}
                 }
             }
         }
-        input
+        &self.last_input
 
         // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
 

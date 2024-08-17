@@ -10,5 +10,6 @@ miniquad = "0.4.5"
 byteorder = "1.4"
 fps_counter = "3.0.0"
 lazy_static = "1.5.0"
+crossbeam-channel = "0.5.13"
 
 

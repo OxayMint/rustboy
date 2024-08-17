@@ -1,11 +1,12 @@
 use super::{
     cartridge,
-    io::{lcd::LCD, IO_Ram},
+    input::InputManager,
+    io::{lcd::LCD, IOManager},
     ppu::PPU,
     timer::Timer,
 };
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub struct Bus {
     pub cart: Option<cartridge::Cartridge>,
@@ -13,7 +14,7 @@ pub struct Bus {
     pub timer: Timer,
     pub wram: [u8; 0x2000],
     pub hram: [u8; 0x80],
-    pub ioram: Mutex<IO_Ram>,
+    pub ioram: IOManager,
     pub ie_register: u8,
 }
 
@@ -25,7 +26,7 @@ impl Bus {
             ppu: PPU::new(),
             wram: [0; 0x2000],
             hram: [0; 0x80],
-            ioram: Mutex::new(IO_Ram::new()),
+            ioram: IOManager::new(),
             ie_register: 0,
         }
     }
@@ -60,10 +61,7 @@ impl Bus {
             //IO section. LCD and TIMER are separated from it
             0xFF40..=0xFF4B => self.ppu.lcd.read(address),
             0xFF04..=0xFF07 => self.timer.read_byte(address),
-            0xFF00..0xFF80 => {
-                let mut ioram = self.ioram.lock().unwrap();
-                ioram.read(address)
-            }
+            0xFF00..0xFF80 => self.ioram.read(address),
 
             //high ram/zero page
             0xFF80..0xFFFF => self.hram_read(address),
@@ -106,7 +104,7 @@ impl Bus {
             0xFF40..=0xFF4B => self.ppu.lcd.write(address, value),
             0xFF04..=0xFF07 => self.timer.write_byte(address, value),
             //IO data
-            0xFF00..0xFF80 => self.ioram.lock().unwrap().write(address, value),
+            0xFF00..0xFF80 => self.ioram.write(address, value),
             //high ram/zero page
             0xFF80..0xFFFF => self.hram_write(address, value),
             //CPU Interrupt enable register

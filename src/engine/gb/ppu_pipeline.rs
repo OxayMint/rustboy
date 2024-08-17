@@ -7,7 +7,7 @@ use sdl2::pixels::Color;
 
 use crate::libs::gameboy::io::lcd::{self, COLORS, LCD};
 
-use super::{FetchState, PPU, XRES};
+use super::{FetchState, PPU, XRES, YRES};
 
 impl PPU {
     pub fn pipeline_fifo_reset(&mut self) {
@@ -29,8 +29,8 @@ impl PPU {
             let b2 = self.pf_control.bgw_fetch_data[2];
             let low = b1 >> bit & 1;
             let hi = (b2 >> bit & 1) << 1;
-
-            let mut col = COLORS[(hi | low) as usize];
+            let col_index = (hi | low) as usize;
+            let mut col = self.lcd.bg_colors[col_index];
 
             if self.lcd.lcdc_bgw_enabled() {
                 col = self.lcd.bg_colors[0];
@@ -113,6 +113,7 @@ impl PPU {
                         self.pf_control.bgw_fetch_data[0] =
                             self.pf_control.bgw_fetch_data[0].wrapping_add(128);
                     }
+                    self.pipeline_load_window_tile();
                 }
 
                 if self.lcd.lcdc_obj_enabled() && !self.line_entries.is_empty() {
@@ -244,5 +245,41 @@ impl PPU {
             }
         }
         self.line_entries.sort_by(|a, b| a.x.cmp(&b.x))
+    }
+
+    fn pipeline_load_window_tile(&mut self) {
+        if !self.window_is_visible() {
+            return;
+        }
+        let win_y = self.lcd.win_y as usize;
+        let win_x = self.lcd.win_x as usize;
+        let y_res = YRES as usize;
+        let x_res = XRES as usize;
+
+        //TODO maybe switch yres and xres below
+        if self.pf_control.fetch_x + 7 >= win_x && self.pf_control.fetch_x + 7 < win_x + x_res + 14
+        {
+            let ly = self.lcd.ly as usize;
+            if ly as usize >= win_y && ly < win_y + y_res {
+                let window_tile_y = (self.window_line / 8) as usize;
+                self.pf_control.bgw_fetch_data[0] = self.vram_read(
+                    self.lcd.lcdc_window_tile_map_area()
+                        + ((self.pf_control.fetch_x + 7 - win_x) / 8)
+                        + (window_tile_y * 32),
+                );
+
+                if self.lcd.lcdc_bg_data_area() == 0x8800 {
+                    self.pf_control.bgw_fetch_data[0] =
+                        self.pf_control.bgw_fetch_data[0].wrapping_add(128);
+                }
+            }
+        }
+    }
+    pub fn window_is_visible(&self) -> bool {
+        return self.lcd.lcdc_window_enabled()
+            // && self.lcd.win_x <= 129
+            && self.lcd.win_x <= 166
+            // && self.lcd.win_y <= 129
+            && self.lcd.win_y < YRES;
     }
 }
