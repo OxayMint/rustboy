@@ -100,11 +100,11 @@ impl Bus {
     }
     pub fn write8(&mut self, address: usize, value: u8) {
         match address {
-            //cartriidge ROM
-            0x8000..0xA000 => self.ppu.vram_write(address, value),
             //order matters here since ppu wram addres range is inside the cart range
+            0x8000..0xA000 => self.ppu.vram_write(address, value),
+            //cartriidge ROM
             0..0xC000 => {
-                if let Some(cart) = &self.cart {
+                if let Some(cart) = &mut self.cart {
                     cart.write(address, value)
                 } else {
                     panic!("Won't work without a cartridge")

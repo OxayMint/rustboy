@@ -1,51 +1,43 @@
-#[path = "cart_info.rs"]
-mod cart_info;
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, path::Path};
 
 use cart_info::CartridgeInfo;
-
+#[path = "cart_info.rs"]
+mod cart_info;
 pub struct Cartridge {
     pub info: CartridgeInfo,
-    pub data: Vec<u8>,
+    pub rom_banks: Vec<Vec<u8>>,
+    pub ram_banks: Vec<Vec<u8>>,
+    pub current_rom_bank: usize,
+    pub current_ram_bank: usize,
+    pub ram_enabled: bool,
+    pub rtc_registers: [u8; 5],
+    pub latch_clock: bool,
+    save_path: String,
 }
 
 impl Cartridge {
     pub fn from_path(path: &str) -> Result<Cartridge, String> {
-        let cart_data = Cartridge::cart_load(path);
-        if cart_data.is_some() {
-            let unwrapped_data = cart_data.unwrap();
-            // for row in 0..16 {
-            //     let ptr = row + 0x100;
-            //     for idx in 0..16 {
-            //         print!("{:02X} ", unwrapped_data[idx + ptr]);
-            //     }
-            //     print!("\n")
-            // }
-            match Cartridge::get_info(&unwrapped_data) {
-                Ok(info) => Ok(Cartridge {
-                    info: info,
-                    data: unwrapped_data,
-                }),
-                Err(err) => Err(err),
-            }
-        } else {
-            Err("Couldn't load ROM file".to_string())
-        }
-    }
-    fn cart_load(path: &str) -> Option<Vec<u8>> {
-        // Load the ROM file into memory
-        match fs::read(path) {
-            Ok(data) => Some(data),
-            Err(_) => None,
-        }
-    }
+        let cart_data = Cartridge::cart_load(path)?;
+        let info = Cartridge::get_info(&cart_data)?;
+        let rom_banks = Cartridge::create_rom_banks(&cart_data, &info);
+        let ram_banks = Cartridge::create_ram_banks(&info);
+        let save_path = Cartridge::get_save_path(path);
 
-    pub fn read(&self, address: usize) -> u8 {
-        // return &0;
-        return self.data[address];
-    }
-    pub fn write(&self, address: usize, value: u8) {}
+        let mut cartridge = Cartridge {
+            info,
+            rom_banks,
+            ram_banks,
+            current_rom_bank: 1,
+            current_ram_bank: 0,
+            ram_enabled: false,
+            rtc_registers: [0; 5],
+            latch_clock: false,
+            save_path,
+        };
 
+        cartridge.load_ram();
+        Ok(cartridge)
+    }
     fn check_header_checksum(card: &[u8]) -> bool {
         let mut checksum: u8 = 0;
         for n in &card[0x0134..0x014d] {
@@ -53,7 +45,6 @@ impl Cartridge {
         }
         return checksum == card[0x014D];
     }
-
     fn get_info(card: &[u8]) -> Result<cart_info::CartridgeInfo, String> {
         match Cartridge::check_header_checksum(card) {
             true => println!("Checksum ok"),
@@ -333,7 +324,7 @@ impl Cartridge {
         } else {
             huc_index = 0;
         }
-        let info = cart_info::CartridgeInfo {
+        let info = CartridgeInfo {
             cart_type: cart_type,
             rom_size: card.len(),
             title: title.to_string(),
@@ -351,6 +342,130 @@ impl Cartridge {
             rumble: [0x1c, 0x1d, 0x1e, 0x22].contains(&cart_type),
         };
         Ok(info)
+    }
+    fn cart_load(path: &str) -> Result<Vec<u8>, String> {
+        fs::read(path).map_err(|e| format!("Failed to read ROM file: {}", e))
+    }
+
+    fn create_rom_banks(data: &[u8], info: &CartridgeInfo) -> Vec<Vec<u8>> {
+        let bank_size = 16 * 1024; // 16 KB per bank
+        let num_banks = data.len() / bank_size;
+        (0..num_banks)
+            .map(|i| {
+                let start = i * bank_size;
+                let end = start + bank_size;
+                data[start..end].to_vec()
+            })
+            .collect()
+    }
+    fn create_ram_banks(info: &CartridgeInfo) -> Vec<Vec<u8>> {
+        let ram_size = match info.cart_type {
+            0x02 | 0x03 => 8,                 // 8 KB
+            0x08 | 0x09 | 0x1A | 0x1B => 32,  // 32 KB for MBC5+RAM+BATTERY
+            0x0C | 0x0D | 0x1C | 0x1D => 128, // 128 KB
+            0x1E => 64,                       // 64 KB
+            _ => 0,
+        } * 1024;
+
+        if ram_size > 0 {
+            let bank_size = 8 * 1024; // 8 KB per bank
+            let num_banks = ram_size / bank_size;
+            vec![vec![0; bank_size]; num_banks]
+        } else {
+            vec![]
+        }
+    }
+    fn get_save_path(rom_path: &str) -> String {
+        let path = Path::new(rom_path);
+        let file_stem = path.file_stem().unwrap().to_str().unwrap();
+        let parent = path.parent().unwrap();
+        parent
+            .join(format!("{}.sav", file_stem))
+            .to_str()
+            .unwrap()
+            .to_string()
+    }
+
+    pub fn read(&self, address: usize) -> u8 {
+        match address {
+            0x0000..=0x3FFF => self.rom_banks[0][address],
+            0x4000..=0x7FFF => {
+                let bank_address = address - 0x4000;
+                self.rom_banks[self.current_rom_bank][bank_address]
+            }
+            0xA000..=0xBFFF => {
+                if self.ram_enabled && !self.ram_banks.is_empty() {
+                    let ram_address = address - 0xA000;
+                    self.ram_banks[self.current_ram_bank][ram_address]
+                } else {
+                    0xFF
+                }
+            }
+            _ => 0xFF,
+        }
+    }
+
+    pub fn write(&mut self, address: usize, value: u8) {
+        match address {
+            0x0000..=0x1FFF => self.ram_enabled = (value & 0x0F) == 0x0A,
+            0x2000..=0x2FFF => self.set_rom_bank_low(value),
+            0x3000..=0x3FFF => self.set_rom_bank_high(value),
+            0x4000..=0x5FFF => self.set_ram_bank(value),
+            0xA000..=0xBFFF => {
+                if self.ram_enabled && !self.ram_banks.is_empty() {
+                    let ram_address = address - 0xA000;
+                    self.ram_banks[self.current_ram_bank][ram_address] = value;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn set_rom_bank_low(&mut self, value: u8) {
+        self.current_rom_bank = (self.current_rom_bank & 0x100) | (value as usize);
+        if self.current_rom_bank == 0 {
+            self.current_rom_bank = 1;
+        }
+        self.current_rom_bank %= self.rom_banks.len();
+    }
+
+    fn set_rom_bank_high(&mut self, value: u8) {
+        self.current_rom_bank = (self.current_rom_bank & 0xFF) | ((value as usize & 1) << 8);
+        self.current_rom_bank %= self.rom_banks.len();
+    }
+
+    fn set_ram_bank(&mut self, value: u8) {
+        self.current_ram_bank = (value & 0x0F) as usize;
+        self.current_ram_bank %= self.ram_banks.len().max(1);
+    }
+
+    pub fn save_ram(&self) {
+        if self.info.battery && !self.ram_banks.is_empty() {
+            let mut save_data = Vec::new();
+            save_data.extend(self.ram_banks.iter().flatten().cloned());
+            save_data.extend_from_slice(&self.rtc_registers);
+
+            if let Err(e) = fs::write(&self.save_path, save_data) {
+                eprintln!("Failed to save RAM: {}", e);
+            }
+        }
+    }
+
+    fn load_ram(&mut self) {
+        if self.info.battery && !self.ram_banks.is_empty() {
+            if let Ok(data) = fs::read(&self.save_path) {
+                let ram_size = self.ram_banks.iter().map(|bank| bank.len()).sum::<usize>();
+                if data.len() >= ram_size + 5 {
+                    let (ram_data, rtc_data) = data.split_at(ram_size);
+                    for (i, bank) in self.ram_banks.iter_mut().enumerate() {
+                        let start = i * bank.len();
+                        let end = start + bank.len();
+                        bank.copy_from_slice(&ram_data[start..end]);
+                    }
+                    self.rtc_registers.copy_from_slice(&rtc_data[..5]);
+                }
+            }
+        }
     }
 }
 
