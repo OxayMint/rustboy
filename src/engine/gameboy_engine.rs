@@ -96,7 +96,7 @@ impl GameBoyEngine {
                 _ = input_sender.send(ui.update(buffer).clone());
             }
             let fps = fps.tick();
-            println!("FPS: {fps}");
+            // println!("FPS: {fps}");
 
             if ui.exited {
                 exit(0);

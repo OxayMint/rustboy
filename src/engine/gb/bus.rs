@@ -67,7 +67,7 @@ impl Bus {
             //OAM
             0xFE00..0xFEA0 => {
                 // if LCD_IN
-                if self.ppu.lcd.dma_active() {
+                if self.ppu.lcd.dma.active {
                     return 0xFF;
                 }
 
@@ -110,7 +110,7 @@ impl Bus {
             0xE000..0xFE00 => {}
             0xFE00..0xFEA0 => {
                 // let lcd = LCD_INSTANCE.lock().unwrap();
-                if self.ppu.lcd.dma_active() {
+                if self.ppu.lcd.dma.active {
                     return;
                 }
                 // drop(lcd);

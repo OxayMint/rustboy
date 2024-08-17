@@ -137,12 +137,13 @@ impl CPU {
             InstructionType::LD => {
                 if self.destination_is_mem {
                     if self.current_instruction.register_2 >= RegisterType::AF {
-                        self.bus.write8(self.mem_dest, self.fetched_data as u8);
                         self.emu_cycles(1);
+                        self.bus.write8(self.mem_dest, self.fetched_data as u8);
                         self.bus
                             .write8(self.mem_dest + 1, (self.fetched_data >> 8) as u8);
                     } else {
-                        self.bus.write16(self.mem_dest as usize, self.fetched_data);
+                        self.bus
+                            .write8(self.mem_dest as usize, self.fetched_data as u8);
                     }
                     self.emu_cycles(1);
                     return 0;
@@ -224,10 +225,10 @@ impl CPU {
             }
             InstructionType::ADD => {
                 let reg_val: u32 = self.read_reg(&self.current_instruction.register_1) as u32;
-                let mut val: u32;
-                let is_16_bit = self.current_instruction.register_1 >= RegisterType::AF;
+                let val: u32;
                 let is_sp = self.current_instruction.register_1 == RegisterType::SP;
 
+                let is_16_bit = self.current_instruction.register_1 >= RegisterType::AF;
                 if is_16_bit {
                     self.emu_cycles(1);
                 }

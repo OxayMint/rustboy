@@ -66,8 +66,8 @@ impl Timer {
             0xFF04 => self.div = 0,
             0xFF05 => self.tima = value,
             0xFF06 => self.tma = value,
-            0xFF07 => self.tac = value & 0x07,
-            // 0xFF07 => self.tac = value,
+            // 0xFF07 => self.tac = value & 0x07,
+            0xFF07 => self.tac = value,
             _ => panic!("Invalid timer address: {:04X}", address),
         }
     }

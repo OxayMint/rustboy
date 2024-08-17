@@ -88,9 +88,6 @@ impl PPU {
     }
 
     pub fn oam_write(&mut self, address: usize, value: u8) {
-        if (address == 0xfe00 && value > 0) {
-            println!("dfsdf")
-        }
         let adjusted_address = if address >= 0xFE00 {
             address.wrapping_sub(0xFE00)
         } else {
