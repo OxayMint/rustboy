@@ -39,6 +39,11 @@ impl Bus {
     pub fn set_request_interrupt_fn(&mut self) {
         // let ptr: fn(InterruptType) = request_interrupt;
         let ioram = Rc::clone(&self.ioram);
+        self.timer.request_interrupt = Some(Rc::new(move |interrupt_type| {
+            ioram.borrow_mut().interrupt_flags |= interrupt_type;
+        }));
+
+        let ioram = Rc::clone(&self.ioram);
         self.ppu.request_interrupt = Some(Rc::new(move |interrupt_type| {
             ioram.borrow_mut().interrupt_flags |= interrupt_type;
         }));
