@@ -1,4 +1,4 @@
-use super::{cpu::CPU, interrupts::InterruptType};
+use super::{bus::Bus, cpu::CPU, interrupts::InterruptType};
 
 pub struct Timer {
     div: u16,         // FF04 - Divider register
@@ -7,6 +7,8 @@ pub struct Timer {
     tac: u8,          // FF07 - Timer control
     div_cycles: u32,  // Internal counter for DIV
     tima_cycles: u32, // Internal counter for TIMA
+
+    pub request_interrupt: Option<fn(InterruptType)>,
 }
 
 impl Timer {
@@ -18,6 +20,7 @@ impl Timer {
             tac: 0,
             div_cycles: 0,
             tima_cycles: 0,
+            request_interrupt: None,
         }
     }
 
@@ -41,7 +44,9 @@ impl Timer {
             self.tima = self.tima.wrapping_add(1);
             if self.tima == 0xFF {
                 self.tima = self.tma;
-                CPU::request_interrupt(InterruptType::TIMER);
+                if let Some(request) = self.request_interrupt {
+                    request(InterruptType::TIMER);
+                }
             }
         }
     }

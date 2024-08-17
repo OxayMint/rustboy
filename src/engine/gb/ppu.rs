@@ -6,12 +6,18 @@ pub mod ppu_models;
 pub mod ppu_pipeline;
 #[path = "ppu_sm.rs"]
 pub mod ppu_sm;
-use std::time::{Duration, Instant};
+use std::{
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
+use super::{
+    bus::Bus,
+    io::lcd::{Mode, COLORS, LCD},
+};
+use crate::libs::gameboy::interrupts::InterruptType;
 use ppu_models::*;
 use sdl2::pixels::Color;
-
-use super::io::lcd::{Mode, COLORS, LCD};
 
 pub static LINES_PER_FRAME: u8 = 154;
 pub static TICKS_PER_LINE: u16 = 456;
@@ -30,6 +36,8 @@ pub struct PPU {
     pub have_update: bool,
     pub last_frame_end: Instant,
     pub frame_duration: Duration,
+
+    pub request_interrupt: Option<Rc<dyn Fn(InterruptType)>>,
 }
 
 impl PPU {
@@ -47,6 +55,8 @@ impl PPU {
             have_update: false,
             last_frame_end: Instant::now(),
             frame_duration: Duration::from_secs_f64(1.0 / 60.0),
+
+            request_interrupt: None,
         }
     }
 

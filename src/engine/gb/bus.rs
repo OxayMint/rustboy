@@ -6,7 +6,12 @@ use super::{
     timer::Timer,
 };
 
-use std::sync::{Arc, Mutex};
+use crate::libs::gameboy::interrupts::InterruptType;
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 pub struct Bus {
     pub cart: Option<cartridge::Cartridge>,
@@ -14,7 +19,7 @@ pub struct Bus {
     pub timer: Timer,
     pub wram: [u8; 0x2000],
     pub hram: [u8; 0x80],
-    pub ioram: IOManager,
+    pub ioram: Rc<RefCell<IOManager>>,
     pub ie_register: u8,
 }
 
@@ -26,10 +31,23 @@ impl Bus {
             ppu: PPU::new(),
             wram: [0; 0x2000],
             hram: [0; 0x80],
-            ioram: IOManager::new(),
+            ioram: Rc::new(RefCell::new(IOManager::new())),
             ie_register: 0,
         }
     }
+
+    pub fn set_request_interrupt_fn(&mut self) {
+        // let ptr: fn(InterruptType) = request_interrupt;
+        let ioram = Rc::clone(&self.ioram);
+        self.ppu.request_interrupt = Some(Rc::new(move |interrupt_type| {
+            ioram.borrow_mut().interrupt_flags |= interrupt_type;
+        }));
+    }
+
+    // pub fn request_interrupt(&mut self, t: InterruptType) {
+    //     self.ioram.interrupt_flags |= t;
+    // }
+
     pub fn read8(&self, address: usize) -> u8 {
         match address {
             //Char/BG
@@ -61,7 +79,7 @@ impl Bus {
             //IO section. LCD and TIMER are separated from it
             0xFF40..=0xFF4B => self.ppu.lcd.read(address),
             0xFF04..=0xFF07 => self.timer.read_byte(address),
-            0xFF00..0xFF80 => self.ioram.read(address),
+            0xFF00..0xFF80 => self.ioram.borrow().read(address),
 
             //high ram/zero page
             0xFF80..0xFFFF => self.hram_read(address),
@@ -104,7 +122,7 @@ impl Bus {
             0xFF40..=0xFF4B => self.ppu.lcd.write(address, value),
             0xFF04..=0xFF07 => self.timer.write_byte(address, value),
             //IO data
-            0xFF00..0xFF80 => self.ioram.write(address, value),
+            0xFF00..0xFF80 => self.ioram.borrow_mut().write(address, value),
             //high ram/zero page
             0xFF80..0xFFFF => self.hram_write(address, value),
             //CPU Interrupt enable register

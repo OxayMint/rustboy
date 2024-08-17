@@ -3,16 +3,14 @@ pub mod lcd;
 
 use std::sync::{Arc, Mutex};
 
-use super::{
-    cpu::INT_FLAGS,
-    input::{Input, InputManager},
-};
+use super::input::{Input, InputManager};
 
 pub struct IOManager {
     // pub ram: [u8; 0x80],
     pub input: InputManager,
     pub input_requested: bool,
     pub serial_data: [u8; 2],
+    pub interrupt_flags: u8,
 }
 
 impl IOManager {
@@ -22,6 +20,7 @@ impl IOManager {
             input: InputManager::new(),
             input_requested: false,
             serial_data: [0; 2],
+            interrupt_flags: 0,
         }
     }
 
@@ -32,7 +31,7 @@ impl IOManager {
             }
             0xFF01 => self.serial_data[0] = value,
             0xFF02 => self.serial_data[1] = value,
-            0xFF0F => *INT_FLAGS.lock().unwrap() = value,
+            0xFF0F => self.interrupt_flags = value,
             _ => {}
         }
     }
@@ -41,7 +40,7 @@ impl IOManager {
             0xFF00 => self.input.gamepad_get_output(),
             0xFF01 => self.serial_data[0],
             0xFF02 => self.serial_data[1],
-            0xFF0F => *INT_FLAGS.lock().unwrap(),
+            0xFF0F => self.interrupt_flags,
             _ => 0,
         }
     }

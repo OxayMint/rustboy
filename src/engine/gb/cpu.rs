@@ -8,14 +8,15 @@ use super::instruction::*;
 use super::interrupts::InterruptType;
 use super::Bus;
 
+use std::collections::HashMap;
 // use super::
 use std::ops::AddAssign;
 
 use std::sync::Mutex;
 
-lazy_static::lazy_static! {
-    pub static ref INT_FLAGS: Mutex<u8> = Mutex::new(0);
-}
+// lazy_static::lazy_static! {
+//     pub static ref INT_FLAGS: Mutex<u8> = Mutex::new(0);
+// }
 pub struct CPU {
     pub regs: Registers,
     pub fetched_data: u16,
@@ -125,7 +126,7 @@ impl CPU {
         } else {
             // println!("halted");
             self.emu_cycles(1);
-            if *INT_FLAGS.lock().unwrap() > 0 {
+            if self.bus.ioram.borrow().interrupt_flags > 0 {
                 self.halted = false;
             } else {
                 if self.af_count > 10 {
@@ -135,7 +136,8 @@ impl CPU {
             }
         }
         if self.int_master_enabled {
-            self.handle_interrupts();
+            let flags = self.bus.ioram.borrow().interrupt_flags;
+            self.bus.ioram.borrow_mut().interrupt_flags = self.handle_interrupts(flags);
             self.ime_enabling = false;
         }
         if self.ime_enabling {
@@ -156,10 +158,9 @@ impl CPU {
         }
     }
 
-    pub fn request_interrupt(int_type: InterruptType) {
-        let mut flags = INT_FLAGS.lock().unwrap();
-        *flags |= int_type;
-    }
+    // pub fn request_interrupt(&mut self, int_type: InterruptType) {
+    //     self.bus.ioram.interrupt_flags |= int_type;
+    // }
     pub fn increment_pointer(&mut self, by: u16) {
         self.regs.pc.add_assign(by)
     }

@@ -1,35 +1,28 @@
 use crate::libs::gameboy::interrupts::InterruptType;
 
-use super::{CPU, INT_FLAGS};
+use super::CPU;
 
 impl CPU {
-    pub fn handle_interrupts(&mut self) {
-        // println!("handling interrupt {}", MAIN_BUS.interrupt_flags);
-
-        // println!("int checking");
-        let mut flags = INT_FLAGS.lock().unwrap();
-        if self.int_check(&mut flags, 0x40, InterruptType::VBLANK) {
-            // println!("int checked for VBLANK");
-        } else if self.int_check(&mut flags, 0x48, InterruptType::LCD_STAT) {
-            // println!("int checked for LCD_STAT");
-        } else if self.int_check(&mut flags, 0x50, InterruptType::TIMER) {
-            // println!("int checked for TIMER");
-        } else if self.int_check(&mut flags, 0x58, InterruptType::SERIAL) {
-            println!("int checked for SERIAL");
-        } else if self.int_check(&mut flags, 0x60, InterruptType::JOYPAD) {
-            println!("int checked for JOYPAD");
+    pub fn handle_interrupts(&mut self, flags: u8) -> u8 {
+        for addr in [0x40, 0x48, 0x50, 0x58, 0x60] {
+            if let Some(flags) = self.int_check(flags, addr) {
+                return flags;
+            }
         }
+        return flags;
     }
 
-    fn int_check(&mut self, flags: &mut u8, addr: u16, int_type: InterruptType) -> bool {
-        if (*flags & int_type as u8) > 0 && (self.bus.get_ie_register() & int_type as u8) > 0 {
+    fn int_check(&mut self, flags: u8, addr: u16) -> Option<u8> {
+        let res: u8;
+        let int_type = InterruptType::from_address(addr) as u8;
+        if (flags & int_type) > 0 && (self.bus.get_ie_register() & int_type) > 0 {
             self.int_handle(addr);
-            *flags &= !(int_type as u8);
+            res = flags & !(int_type);
             self.halted = false;
             self.int_master_enabled = false;
-            true
+            Some(res)
         } else {
-            false
+            None
         }
     }
     fn int_handle(&mut self, addr: u16) {

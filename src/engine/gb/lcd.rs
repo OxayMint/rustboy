@@ -233,7 +233,6 @@ impl LCD {
         }
     }
     pub fn update_palette(&mut self, data: u8, palette: u8) {
-        println!("update palette {palette}: {data:b}");
         // let colors = match palette {
         //     1 => &mut self.obj0_colors,
         //     2 => &mut self.obj1_colors,

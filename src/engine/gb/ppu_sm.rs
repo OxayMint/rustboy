@@ -4,13 +4,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+use super::{LINES_PER_FRAME, PPU, TICKS_PER_LINE, XRES, YRES};
+use crate::libs::gameboy::interrupts::InterruptType::{LCD_STAT, VBLANK};
 use crate::libs::gameboy::{
     cpu::CPU,
     interrupts::InterruptType,
     io::lcd::{Mode, StatType},
 };
-
-use super::{LINES_PER_FRAME, PPU, TICKS_PER_LINE, XRES, YRES};
 
 impl PPU {
     pub fn ly_increment(&mut self) {
@@ -30,7 +30,10 @@ impl PPU {
 
             if self.lcd.lcds_stat_int(StatType::LYC) {
                 // println!("stat is LYC, interrupting");
-                CPU::request_interrupt(InterruptType::LCD_STAT);
+
+                if let Some(request_interrupt) = &self.request_interrupt {
+                    request_interrupt(InterruptType::LCD_STAT);
+                }
             }
             // println!("stat is not LYC");
         } else {
@@ -57,7 +60,9 @@ impl PPU {
             self.pipeline_fifo_reset();
             self.lcd.lcds_mode_set(Mode::HBlank);
             if self.lcd.lcds_stat_int(StatType::HBLANK) {
-                CPU::request_interrupt(InterruptType::LCD_STAT);
+                if let Some(request_interrupt) = &self.request_interrupt {
+                    request_interrupt(InterruptType::LCD_STAT);
+                }
             }
         }
     }
@@ -84,10 +89,12 @@ impl PPU {
             if self.lcd.ly >= YRES {
                 self.lcd.lcds_mode_set(Mode::VBlank);
 
-                CPU::request_interrupt(InterruptType::VBLANK);
+                if let Some(request_interrupt) = &self.request_interrupt {
+                    request_interrupt(InterruptType::VBLANK);
 
-                if self.lcd.lcds_stat_int(StatType::VBLANK) {
-                    CPU::request_interrupt(InterruptType::LCD_STAT);
+                    if self.lcd.lcds_stat_int(StatType::VBLANK) {
+                        request_interrupt(InterruptType::LCD_STAT);
+                    }
                 }
 
                 let sleep_time: Duration;

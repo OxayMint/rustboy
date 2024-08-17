@@ -9,6 +9,17 @@ pub enum InterruptType {
     SERIAL = 8,
     JOYPAD = 16,
 }
+impl InterruptType {
+    pub(crate) fn from_address(addr: u16) -> Self {
+        match addr {
+            0x40 => InterruptType::VBLANK,
+            0x48 => InterruptType::LCD_STAT,
+            0x50 => InterruptType::TIMER,
+            0x58 => InterruptType::SERIAL,
+            _ => InterruptType::JOYPAD,
+        }
+    }
+}
 
 impl BitOr<u8> for InterruptType {
     type Output = u8;
