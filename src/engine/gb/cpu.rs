@@ -5,15 +5,7 @@ pub mod fetch;
 #[path = "cpu_interrupts.rs"]
 pub mod interrupts;
 use super::instruction::*;
-use super::interrupts::InterruptType;
 use super::Bus;
-
-use std::collections::HashMap;
-// use super::
-use std::ops::AddAssign;
-
-use std::sync::Mutex;
-
 // lazy_static::lazy_static! {
 //     pub static ref INT_FLAGS: Mutex<u8> = Mutex::new(0);
 // }
@@ -77,13 +69,13 @@ impl CPU {
         let mut res = 0i8;
         if !self.halted {
             let opcode: u8 = self.bus.read8(self.regs.pc as usize);
-            let pc = self.regs.pc.clone();
+            // let pc = self.regs.pc.clone();
             self.current_instruction = Instruction::from_opcode(&opcode);
             self.increment_pointer(1);
             self.destination_is_mem = false;
 
-            let following_byte = self.bus.read8((self.regs.pc) as usize);
-            let third_byte = self.bus.read8((self.regs.pc + 1) as usize);
+            // let following_byte = self.bus.read8((self.regs.pc) as usize);
+            // let third_byte = self.bus.read8((self.regs.pc + 1) as usize);
             // res = format!("A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}\n",
             //     self.regs.a,
             //     self.regs.f,
@@ -132,7 +124,7 @@ impl CPU {
                 if self.af_count > 10 {
                     // exit(0);
                 }
-                self.af_count.add_assign(1);
+                self.af_count += 1;
             }
         }
         if self.int_master_enabled {
@@ -162,7 +154,7 @@ impl CPU {
     //     self.bus.ioram.interrupt_flags |= int_type;
     // }
     pub fn increment_pointer(&mut self, by: u16) {
-        self.regs.pc.add_assign(by)
+        self.regs.pc += by;
     }
 
     fn bit_set(a: &mut u8, n: u8, on: bool) {

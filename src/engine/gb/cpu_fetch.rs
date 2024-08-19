@@ -46,7 +46,7 @@ impl CPU {
                 let res = self.bus.read8(addr as usize);
                 self.emu_cycles(1);
                 self.set_reg(
-                    RegisterType::HL,
+                    &RegisterType::HL,
                     self.read_reg(&RegisterType::HL).wrapping_add(1),
                 );
                 res as u16
@@ -56,7 +56,7 @@ impl CPU {
                 let res = self.bus.read8(addr as usize) as u16;
                 self.emu_cycles(1);
                 self.set_reg(
-                    RegisterType::HL,
+                    &RegisterType::HL,
                     self.read_reg(&RegisterType::HL).wrapping_sub(1),
                 );
                 res
@@ -66,7 +66,7 @@ impl CPU {
                 self.destination_is_mem = true;
                 let result = self.read_reg(&self.current_instruction.register_2);
                 self.set_reg(
-                    RegisterType::HL,
+                    &RegisterType::HL,
                     self.read_reg(&RegisterType::HL).wrapping_add(1),
                 );
                 result
@@ -76,11 +76,12 @@ impl CPU {
                 self.destination_is_mem = true;
                 let result = self.read_reg(&self.current_instruction.register_2);
                 self.set_reg(
-                    RegisterType::HL,
+                    &RegisterType::HL,
                     self.read_reg(&RegisterType::HL).wrapping_sub(1),
                 );
                 result
             }
+
             AddressMode::R_A8 => {
                 let res = self.bus.read8(self.regs.pc as usize) as u16;
                 self.emu_cycles(1);

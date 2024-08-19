@@ -12,7 +12,7 @@ impl CPU {
         self.emu_cycles(1);
 
         if register == RegisterType::HL {
-            self.emu_cycles(2);
+            // self.emu_cycles(2);
         }
         match bit_op {
             1 => {
@@ -137,8 +137,8 @@ impl CPU {
             InstructionType::LD => {
                 if self.destination_is_mem {
                     if self.current_instruction.register_2 >= RegisterType::AF {
-                        self.emu_cycles(1);
                         self.bus.write8(self.mem_dest, self.fetched_data as u8);
+                        self.emu_cycles(1);
                         self.bus
                             .write8(self.mem_dest + 1, (self.fetched_data >> 8) as u8);
                     } else {
@@ -158,62 +158,48 @@ impl CPU {
                     let h = (sp & 0xF) + (e8 as u16 & 0xF) > 0xF;
                     let c = (sp & 0xFF) + (e8 as u16 & 0xFF) > 0xFF;
 
-                    self.set_reg(RegisterType::HL, result);
+                    self.set_reg(&RegisterType::HL, result);
                     self.set_flags(0, 0, h as i8, c as i8);
                     return 0;
                 }
                 self.set_reg(
-                    self.current_instruction.register_1.clone(),
+                    &self.current_instruction.register_1.clone(),
                     self.fetched_data,
                 );
             }
             InstructionType::INC => {
-                let mut new_val = self
-                    .read_reg(&self.current_instruction.register_1)
-                    .wrapping_add(1);
-
-                if self.current_instruction.register_1 >= RegisterType::AF {
-                    self.emu_cycles(1);
-                }
-                if self.current_instruction.register_1 == RegisterType::HL
-                    && self.current_instruction.address_mode == AddressMode::MR
-                {
+                let new_val = self.fetched_data.wrapping_add(1);
+                if self.destination_is_mem {
                     let hl_val = self.read_reg(&RegisterType::HL);
-                    new_val = self.bus.read16(hl_val as usize).wrapping_add(1);
-                    new_val &= 0xFF;
-                    self.bus.write16(hl_val as usize, new_val);
+                    self.bus.write8(hl_val as usize, new_val as u8);
                 } else {
-                    self.set_reg(self.current_instruction.register_1.clone(), new_val);
-                    new_val = self.read_reg(&self.current_instruction.register_1);
+                    self.set_reg(&self.current_instruction.register_1.clone(), new_val);
                 }
-                if (self.current_instruction.opcode & 0x3) != 0x3 {
-                    self.set_flags((new_val == 0) as i8, 0, ((new_val & 0xf) == 0) as i8, -1)
+                if (self.current_instruction.opcode & 0b11) != 0x3 {
+                    self.set_flags(
+                        (new_val & 0xff == 0) as i8,
+                        0,
+                        ((new_val & 0xf) == 0) as i8,
+                        -1,
+                    )
                 }
-                // Z  Set if result is 0.
-                // N  0
-                // H Set if overflow from bit 3.
             }
             InstructionType::DEC => {
                 let new_val = self.fetched_data.wrapping_sub(1);
-                if self.current_instruction.register_1 >= RegisterType::AF {
-                    self.emu_cycles(1);
-                }
-                if self.current_instruction.register_1 == RegisterType::SP {
-                    self.regs.sp = new_val
+                if self.destination_is_mem {
+                    let hl_val = self.read_reg(&RegisterType::HL);
+                    self.bus.write8(hl_val as usize, new_val as u8);
                 } else {
-                    if self.destination_is_mem {
-                        self.bus.write16(self.mem_dest, new_val);
-                    } else {
-                        self.set_reg(self.current_instruction.register_1.clone(), new_val);
-                    }
-                    if (self.current_instruction.opcode & 0xb) != 0xb {
-                        self.set_flags(
-                            (new_val == 0) as i8,
-                            1,
-                            ((self.fetched_data & 0xf) == 0x0) as i8,
-                            -1,
-                        )
-                    }
+                    self.set_reg(&self.current_instruction.register_1.clone(), new_val);
+                }
+
+                if (self.current_instruction.opcode & 0xb) != 0xb {
+                    self.set_flags(
+                        (new_val == 0) as i8,
+                        1,
+                        ((self.fetched_data & 0xf) == 0x0) as i8,
+                        -1,
+                    )
                 }
             }
             InstructionType::RLCA => {
@@ -265,43 +251,11 @@ impl CPU {
                 }
 
                 self.set_reg(
-                    self.current_instruction.register_1.clone(),
+                    &self.current_instruction.register_1.clone(),
                     val as u16 & 0xFFFF,
                 );
                 self.set_flags(z, 0, h, c);
             }
-            // InstructionType::ADD => {
-            //     let reg_val: u32 = self.read_reg(&self.current_instruction.register_1) as u32;
-            //     let mut val: u32 = reg_val + self.fetched_data as u32;
-            //     let is_16_bit = self.current_instruction.register_1 >= RegisterType::AF;
-            //     if is_16_bit {
-            //         self.emu_cycles(1);
-            //         if self.current_instruction.register_1 == RegisterType::SP {
-            //             val = reg_val.wrapping_add(self.fetched_data as u32) as u32;
-            //         }
-            //     }
-            //     let mut z: i8 = ((val & 0xff) == 0) as i8;
-            //     let mut h: i8 = ((reg_val & 0xf) + (self.fetched_data & 0xf) as u32 >= 0x10) as i8;
-            //     let mut c: i8 = ((reg_val & 0xff).wrapping_add((self.fetched_data & 0xff) as u32)
-            //         >= 0x100) as i8;
-            //     if is_16_bit {
-            //         z = -1;
-            //         h = ((reg_val & 0xfff) + (self.fetched_data & 0xfff) as u32 >= 0x1000) as i8;
-            //         c = (val >= 0x10000) as i8;
-            //     }
-            //     if self.current_instruction.register_1 == RegisterType::SP {
-            //         z = 0;
-            //         h = ((reg_val & 0xf) as i8 + (self.fetched_data & 0xf) as i8 >= 0x10) as i8;
-            //         c = ((reg_val & 0xff) as i16 + (self.fetched_data & 0xff) as i16 >= 0x100)
-            //             as i8;
-            //     }
-
-            //     self.set_reg(
-            //         self.current_instruction.register_1.clone(),
-            //         val as u16 & 0xFFFF,
-            //     );
-            //     self.set_flags(z, 0, h, c);
-            // }
             InstructionType::RRCA => {
                 let mut val: u8 = self.regs.a;
                 let c = val & 1; // = 1 or 0. Basically a bool thats says whether the first bit of A is 1
@@ -329,9 +283,9 @@ impl CPU {
                 self.goto_addr(new_address, false);
 
                 // Add extra cycles if the condition is true
-                if self.check_condition() {
-                    self.emu_cycles(1); // Add 1 more cycle for a total of 3
-                }
+                // if self.check_condition() {
+                //     self.emu_cycles(1); // Add 1 more cycle for a total of 3
+                // }
             }
             InstructionType::RRA => {
                 let old_c = self.flag_c() as u8;
@@ -390,7 +344,7 @@ impl CPU {
 
                 let result = left.wrapping_sub(right);
 
-                self.set_reg(self.current_instruction.register_1.clone(), result as u16);
+                self.set_reg(&self.current_instruction.register_1.clone(), result as u16);
                 self.set_flags(
                     (result == 0) as i8,
                     1,
@@ -448,8 +402,10 @@ impl CPU {
                 self.emu_cycles(1);
                 let hi = self.bus.stack_pop8(&mut self.regs.sp);
                 self.emu_cycles(1);
-                let reg = self.current_instruction.register_1.clone();
-                self.set_reg(reg, ((hi as u16) << 8) | low as u16);
+                self.set_reg(
+                    &self.current_instruction.register_1.clone(),
+                    ((hi as u16) << 8) | low as u16,
+                );
                 // }
                 if self.current_instruction.register_1 == RegisterType::AF {
                     self.set_flags(
@@ -473,7 +429,7 @@ impl CPU {
                 self.emu_cycles(1);
             }
             InstructionType::RET => {
-                if !self.check_condition() {
+                if self.current_instruction.condition != ConditionType::NONE {
                     self.emu_cycles(1);
                 }
                 if self.check_condition() {
@@ -605,7 +561,7 @@ impl CPU {
             RegisterType::N => panic!("Non existent register occurred"),
         }
     }
-    pub fn set_reg(&mut self, register: RegisterType, val: u16) {
+    pub fn set_reg(&mut self, register: &RegisterType, val: u16) {
         match register {
             RegisterType::A => self.regs.a = val as u8,
             RegisterType::B => self.regs.b = val as u8,
