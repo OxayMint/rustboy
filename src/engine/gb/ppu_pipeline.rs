@@ -106,8 +106,8 @@ impl PPU {
                     let bg_map_start = self.lcd.lcdc_bg_map_area();
                     self.pf_control.bgw_fetch_data[0] = self.vram_read(
                         bg_map_start
-                            + (self.pf_control.map_x.wrapping_div(8))
-                            + ((self.pf_control.map_y.wrapping_div(8)).wrapping_mul(32)),
+                            + (self.pf_control.map_x as usize / 8)
+                            + ((self.pf_control.map_y as usize / 8) * 32),
                     );
                     if self.lcd.lcdc_bg_data_area() == 0x8800 {
                         self.pf_control.bgw_fetch_data[0] =
@@ -124,10 +124,10 @@ impl PPU {
                 self.pf_control.fetch_x.add_assign(8);
             }
             super::FetchState::DATA0 => {
-                let idx = self.lcd.lcdc_bg_data_area().wrapping_add(
-                    ((self.pf_control.bgw_fetch_data[0] as usize).wrapping_mul(16))
-                        .wrapping_add(self.pf_control.tile_y),
-                );
+                let idx = self.lcd.lcdc_bg_data_area()
+                    + ((self.pf_control.bgw_fetch_data[0] as usize) * 16)
+                    + self.pf_control.tile_y as usize;
+
                 self.pf_control.bgw_fetch_data[1] = self.vram_read(idx);
 
                 self.pipeline_load_sprite_data(0);
@@ -137,10 +137,10 @@ impl PPU {
             super::FetchState::DATA1 => {
                 let data_start = self.lcd.lcdc_bg_data_area();
                 self.pf_control.bgw_fetch_data[2] = self.vram_read(
-                    data_start.wrapping_add(
-                        ((self.pf_control.bgw_fetch_data[0] as usize).wrapping_mul(16))
-                            .wrapping_add(self.pf_control.tile_y + 1),
-                    ),
+                    data_start
+                        + ((self.pf_control.bgw_fetch_data[0] as usize) * 16)
+                        + self.pf_control.tile_y as usize
+                        + 1,
                 );
 
                 // if data_start == 0x8800 {
@@ -166,17 +166,18 @@ impl PPU {
     }
 
     pub fn pipeline_process(&mut self) {
-        self.pf_control.map_y = self.lcd.ly as usize + self.lcd.scroll_y as usize;
-        self.pf_control.map_x = self.pf_control.fetch_x as usize + self.lcd.scroll_x as usize;
-        if self.pf_control.map_x > 255 {
-            self.pf_control.map_x.sub_assign(255);
-        }
-        self.pf_control.tile_y =
-            (self.lcd.scroll_y.wrapping_add(self.pf_control.map_y as u8) as usize % 8) * 2;
+        self.pf_control.map_y = self.lcd.ly.wrapping_add(self.lcd.scroll_y);
+        self.pf_control.map_x = self.pf_control.fetch_x.wrapping_add(self.lcd.scroll_x);
+        self.pf_control.tile_y = (self
+            .lcd
+            .scroll_y
+            .wrapping_add(self.pf_control.map_y)
+            .wrapping_rem(8))
+        .wrapping_mul(2);
 
-        if self.pf_control.map_y >= 256 {
-            self.pf_control.map_y.sub_assign(256);
-        }
+        // if self.pf_control.map_y >= 256 {
+        //     self.pf_control.map_y.sub_assign(256);
+        // }
         if self.line_ticks & 1 == 0 {
             self.pipeline_fetch();
         }
@@ -186,8 +187,9 @@ impl PPU {
     pub fn pipeline_push_pixel(&mut self) {
         if self.pf_control.pixel_fifo.len() > 8 {
             if let Some(pixel) = self.pixel_fifo_pop() {
-                if self.pf_control.line_x >= (self.lcd.scroll_x as usize % 8) {
-                    let idx = self.pf_control.pushed_x + (self.lcd.ly as usize * XRES as usize);
+                if self.pf_control.line_x >= self.lcd.scroll_x.wrapping_rem(8) {
+                    let idx =
+                        self.pf_control.pushed_x as usize + (self.lcd.ly as usize * XRES as usize);
                     self.video_buffer[idx] = pixel;
                     self.pf_control.pushed_x += 1;
                 }
@@ -257,15 +259,16 @@ impl PPU {
         let x_res = XRES as usize;
 
         //TODO maybe switch yres and xres below
-        if self.pf_control.fetch_x + 7 >= win_x && self.pf_control.fetch_x + 7 < win_x + x_res + 14
+        if self.pf_control.fetch_x + 7 >= self.lcd.win_x
+            && self.pf_control.fetch_x + 7 < self.lcd.win_x + XRES + 14
         {
             let ly = self.lcd.ly as usize;
             if ly as usize >= win_y && ly < win_y + y_res {
                 let window_tile_y = (self.window_line / 8) as usize;
                 self.pf_control.bgw_fetch_data[0] = self.vram_read(
                     self.lcd.lcdc_window_tile_map_area()
-                        + ((self.pf_control.fetch_x + 7 - win_x) / 8)
-                        + (window_tile_y * 32),
+                        + ((self.pf_control.fetch_x as usize + 7 - self.lcd.win_x as usize) / 8)
+                        + (window_tile_y as usize * 32),
                 );
 
                 if self.lcd.lcdc_bg_data_area() == 0x8800 {

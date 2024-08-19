@@ -1,7 +1,3 @@
-use std::{
-    ops::{AddAssign, SubAssign},
-    sync::{Arc, Mutex},
-};
 // use crate::GameBoyEngine::
 use sdl2::{event::Event, keyboard::Keycode, pixels::Color, rect::Point};
 
@@ -48,7 +44,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn update(&mut self, buffer: Vec<Color>) -> &Input {
+    pub fn update(&mut self, buffer: Vec<Color>) -> (&Input, bool, bool) {
         if let Some(canvas) = &mut self.canvas {
             canvas.set_draw_color(COLORS[0]);
             canvas.clear();
@@ -59,6 +55,8 @@ impl Renderer {
         if let Some(canvas) = &mut self.canvas {
             canvas.present();
         }
+        let mut save = false;
+        let mut load = false;
         if let Some(event_pump) = &mut self.event_pump {
             for event in event_pump.poll_iter() {
                 match event {
@@ -81,6 +79,8 @@ impl Renderer {
                         Keycode::DOWN => self.last_input.Down = true,
                         Keycode::LEFT => self.last_input.Left = true,
                         Keycode::RIGHT => self.last_input.Right = true,
+                        Keycode::I => save = true,
+                        Keycode::O => load = true,
                         _ => {}
                     },
                     Event::KeyUp {
@@ -100,7 +100,7 @@ impl Renderer {
                 }
             }
         }
-        &self.last_input
+        (&self.last_input, save, load)
 
         // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
 
@@ -125,10 +125,10 @@ impl Renderer {
         for y in 0..24 {
             for x in 0..16 {
                 self.display_tile(debug_vram, tile_index, x_draw + x, y_draw + y);
-                x_draw.add_assign(8);
-                tile_index.add_assign(1);
+                x_draw += 8;
+                tile_index += 1;
             }
-            y_draw.add_assign(8);
+            y_draw += 8;
             x_draw = 160;
         }
     }
@@ -152,7 +152,7 @@ impl Renderer {
                     canvas.set_draw_color(col);
                     _ = canvas.draw_point(Point::new(x + (7 - bit), y + (row as i32 / 2)));
                     // _ = canvas.fill_rect(r);
-                    bit.sub_assign(1);
+                    bit -= 1;
                 }
             }
         }

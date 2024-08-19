@@ -60,15 +60,15 @@ pub enum FetchState {
 pub struct PixelFifo {
     pub cur_fetch_state: FetchState,
     pub pixel_fifo: LinkedList<Color>,
-    pub line_x: usize,
-    pub pushed_x: usize,
-    pub fetch_x: usize,
+    pub line_x: u8,
+    pub pushed_x: u8,
+    pub fetch_x: u8,
     pub bgw_fetch_data: [u8; 3],
     pub fetch_entry_data: [u8; 6], //oam data.: usize,
-    pub map_y: usize,
-    pub map_x: usize,
-    pub tile_y: usize,
-    pub fifo_x: usize,
+    pub map_y: u8,
+    pub map_x: u8,
+    pub tile_y: u8,
+    pub fifo_x: u8,
 }
 impl PixelFifo {
     pub fn new() -> Self {

@@ -11,10 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{
-    bus::Bus,
-    io::lcd::{Mode, COLORS, LCD},
-};
+use super::io::lcd::{Mode, COLORS, LCD};
 use crate::libs::gameboy::interrupts::InterruptType;
 use ppu_models::*;
 use sdl2::pixels::Color;

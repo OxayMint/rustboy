@@ -1,7 +1,3 @@
-use std::ops::{AddAssign, SubAssign};
-
-use super::bus::Bus;
-
 pub struct DMA {
     pub active: bool,
     pub byte_address: usize,
@@ -30,14 +26,14 @@ impl DMA {
             return None;
         }
         if self.start_delay > 0 {
-            self.start_delay.sub_assign(1);
+            self.start_delay -= 1;
             return None;
         }
 
         let source_address = self.value as usize * 0x100 + self.byte_address;
         let dest_address = self.byte_address;
 
-        self.byte_address.add_assign(1);
+        self.byte_address += 1;
         self.active = self.byte_address < 0xA0;
 
         Some((source_address, dest_address))

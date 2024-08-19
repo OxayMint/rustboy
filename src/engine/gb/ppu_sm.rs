@@ -56,7 +56,7 @@ impl PPU {
         //     return;
         // }
         self.pipeline_process();
-        if self.pf_control.pushed_x >= XRES as usize {
+        if self.pf_control.pushed_x >= XRES {
             self.pipeline_fifo_reset();
             self.lcd.lcds_mode_set(Mode::HBlank);
             if self.lcd.lcds_stat_int(StatType::HBLANK) {

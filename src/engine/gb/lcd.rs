@@ -1,11 +1,8 @@
-use std::{
-    ops::{BitAnd, BitOr, BitOrAssign},
-    sync::Mutex,
-};
+use std::ops::{BitAnd, BitOr};
 
 use sdl2::pixels::Color;
 
-use crate::libs::gameboy::{cpu::CPU, dma::DMA, interrupts::InterruptType};
+use crate::libs::gameboy::dma::DMA;
 
 pub static COLORS: [Color; 4] = [
     //E1F8CF
@@ -49,11 +46,6 @@ impl BitAnd<StatType> for u8 {
 
     fn bitand(self, rhs: StatType) -> Self::Output {
         self & (rhs as u8)
-    }
-}
-impl BitOrAssign<StatType> for u8 {
-    fn bitor_assign(&mut self, rhs: StatType) {
-        *self |= rhs as u8;
     }
 }
 
@@ -162,7 +154,7 @@ impl LCD {
     pub fn lcds_mode_set(&mut self, mode: Mode) {
         // print!("setting lcds mode from {}", self.lcds as u8);
         self.lcds &= !0b11;
-        self.lcds |= mode;
+        self.lcds = self.lcds | mode;
         // println!(" to {}", self.lcds as u8);
     }
     // pub fn lyc_is_ly(&self) -> bool {
@@ -288,8 +280,8 @@ impl BitOr<Mode> for u8 {
         self | (rhs as u8)
     }
 }
-impl BitOrAssign<Mode> for u8 {
-    fn bitor_assign(&mut self, rhs: Mode) {
-        *self |= rhs as u8;
-    }
-}
+// impl BitOrAssign<Mode> for u8 {
+//     fn bitor_assign(&mut self, rhs: Mode) {
+//         *self |= rhs as u8;
+//     }
+// }

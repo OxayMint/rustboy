@@ -442,7 +442,7 @@ impl Cartridge {
     pub fn save_ram(&self) {
         if self.info.battery && !self.ram_banks.is_empty() {
             let mut save_data = Vec::new();
-            save_data.extend(self.ram_banks.iter().flatten().cloned());
+            save_data.extend(self.ram_banks.iter().flatten());
             save_data.extend_from_slice(&self.rtc_registers);
 
             if let Err(e) = fs::write(&self.save_path, save_data) {
@@ -451,7 +451,7 @@ impl Cartridge {
         }
     }
 
-    fn load_ram(&mut self) {
+    pub fn load_ram(&mut self) {
         if self.info.battery && !self.ram_banks.is_empty() {
             if let Ok(data) = fs::read(&self.save_path) {
                 let ram_size = self.ram_banks.iter().map(|bank| bank.len()).sum::<usize>();

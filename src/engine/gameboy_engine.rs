@@ -57,6 +57,8 @@ impl GameBoyEngine {
         let cartridge = Cartridge::from_path(path).unwrap();
         println!("{}", cartridge.info.to_string());
         let (input_sender, input_receiver) = bounded(1);
+        let (save_sender, save_receiver) = bounded(1);
+        let (load_sender, load_receiver) = bounded(1);
         let cpu_thread = thread::spawn(move || {
             let mut bus = Bus::new();
             bus.set_cartridge(cartridge);
@@ -74,6 +76,18 @@ impl GameBoyEngine {
                 }
                 if !input_receiver.is_empty() {
                     cpu.bus.ioram.borrow_mut().input.last_input = input_receiver.recv().unwrap();
+                }
+                if !save_receiver.is_empty() {
+                    _ = save_receiver.recv().unwrap();
+                    if let Some(cart) = &mut cpu.bus.cart {
+                        cart.save_ram();
+                    }
+                }
+                if !load_receiver.is_empty() {
+                    _ = load_receiver.recv().unwrap();
+                    if let Some(cart) = &mut cpu.bus.cart {
+                        cart.load_ram();
+                    }
                 }
 
                 if step_result < 0 {
@@ -93,7 +107,14 @@ impl GameBoyEngine {
         while self.running {
             // calc FPS...
             if let Ok(buffer) = buffer_receiver.recv() {
-                _ = input_sender.send(ui.update(buffer).clone());
+                let (input, save, load) = ui.update(buffer);
+                _ = input_sender.send(input.clone());
+                if save {
+                    _ = save_sender.send(true);
+                }
+                if load {
+                    _ = load_sender.send(true);
+                }
             }
             let fps = fps.tick();
             // println!("FPS: {fps}");
