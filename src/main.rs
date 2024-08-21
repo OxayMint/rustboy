@@ -1,11 +1,9 @@
 use std::{env, path::Path};
+use GBcore::GBCore;
+// use crate::
 
-use libs::gameboy::GameBoyEngine;
-
-mod emulator;
-mod libs;
-#[macro_use]
-extern crate lazy_static;
+// #[macro_use]
+// extern crate lazy_static;
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
@@ -22,7 +20,7 @@ fn main() {
         println!("File does not exist: {}", path);
     }
     // Initialize the emulator
-    let mut emulator = GameBoyEngine::new();
+    let mut emulator = GBCore::new();
     // println!("{}", emulator.gb_engine.memory.cart.info.to_string());
     emulator.start(path);
 }

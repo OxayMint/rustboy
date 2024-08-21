@@ -1,4 +1,4 @@
-use super::{bus::Bus, cpu::CPU, interrupts::InterruptType};
+use crate::{interrupts::InterruptType, Bus, CPU};
 use std::rc::Rc;
 
 pub struct Timer {
@@ -15,7 +15,7 @@ pub struct Timer {
 impl Timer {
     pub fn new() -> Self {
         Timer {
-            div: 0xAC00,
+            div: 0xABCC,
             tima: 0,
             tma: 0,
             tac: 0,

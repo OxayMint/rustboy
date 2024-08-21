@@ -1,13 +1,11 @@
 use std::{
-    ops::AddAssign,
     thread,
     time::{Duration, Instant},
 };
 
 use super::{LINES_PER_FRAME, PPU, TICKS_PER_LINE, XRES, YRES};
-use crate::libs::gameboy::interrupts::InterruptType::{LCD_STAT, VBLANK};
-use crate::libs::gameboy::{
-    cpu::CPU,
+
+use crate::{
     interrupts::InterruptType,
     io::lcd::{Mode, StatType},
 };

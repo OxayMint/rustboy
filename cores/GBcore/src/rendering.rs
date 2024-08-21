@@ -51,7 +51,7 @@ impl Renderer {
         }
 
         self.draw_main(buffer);
-        // self.update_debug_window(debug_vram);
+        // self.update_debug_window();
         if let Some(canvas) = &mut self.canvas {
             canvas.present();
         }

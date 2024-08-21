@@ -1,13 +1,6 @@
-use std::{
-    ops::{AddAssign, Div, DivAssign, Mul, SubAssign},
-    process::exit,
-};
-
 use sdl2::pixels::Color;
 
-use crate::libs::gameboy::io::lcd::{self, COLORS, LCD};
-
-use super::{FetchState, PPU, XRES, YRES};
+use super::{fetch_state::FetchState, PPU, XRES, YRES};
 
 impl PPU {
     pub fn pipeline_fifo_reset(&mut self) {
@@ -41,7 +34,7 @@ impl PPU {
             }
             if x >= 0 {
                 self.pixel_fifo_push(col);
-                self.pf_control.fifo_x.add_assign(1);
+                self.pf_control.fifo_x += 1;
             }
         }
 
@@ -99,7 +92,7 @@ impl PPU {
     }
     pub fn pipeline_fetch(&mut self) {
         match self.pf_control.cur_fetch_state {
-            super::FetchState::TILE => {
+            FetchState::TILE => {
                 self.fetched_entries.clear();
 
                 if !self.lcd.lcdc_bgw_enabled() {
@@ -121,9 +114,9 @@ impl PPU {
                 }
 
                 self.pf_control.cur_fetch_state = FetchState::DATA0;
-                self.pf_control.fetch_x.add_assign(8);
+                self.pf_control.fetch_x += 8;
             }
-            super::FetchState::DATA0 => {
+            FetchState::DATA0 => {
                 let idx = self.lcd.lcdc_bg_data_area()
                     + ((self.pf_control.bgw_fetch_data[0] as usize) * 16)
                     + self.pf_control.tile_y as usize;
@@ -134,7 +127,7 @@ impl PPU {
 
                 self.pf_control.cur_fetch_state = FetchState::DATA1;
             }
-            super::FetchState::DATA1 => {
+            FetchState::DATA1 => {
                 let data_start = self.lcd.lcdc_bg_data_area();
                 self.pf_control.bgw_fetch_data[2] = self.vram_read(
                     data_start
@@ -154,10 +147,10 @@ impl PPU {
 
                 self.pf_control.cur_fetch_state = FetchState::SLEEP;
             }
-            super::FetchState::SLEEP => {
+            FetchState::SLEEP => {
                 self.pf_control.cur_fetch_state = FetchState::PUSH;
             }
-            super::FetchState::PUSH => {
+            FetchState::PUSH => {
                 if self.pipeline_fifo_add() {
                     self.pf_control.cur_fetch_state = FetchState::TILE;
                 }

@@ -1,43 +1,49 @@
 use std::{collections::HashMap, fs, path::Path};
+mod cart_info;
 
 use cart_info::CartridgeInfo;
-#[path = "cart_info.rs"]
-mod cart_info;
 pub struct Cartridge {
     pub info: CartridgeInfo,
+    pub data: Vec<u8>,
     pub rom_banks: Vec<Vec<u8>>,
     pub ram_banks: Vec<Vec<u8>>,
     pub current_rom_bank: usize,
     pub current_ram_bank: usize,
     pub ram_enabled: bool,
-    pub rtc_registers: [u8; 5],
-    pub latch_clock: bool,
     save_path: String,
 }
 
 impl Cartridge {
     pub fn from_path(path: &str) -> Result<Cartridge, String> {
-        let cart_data = Cartridge::cart_load(path)?;
-        let info = Cartridge::get_info(&cart_data)?;
-        let rom_banks = Cartridge::create_rom_banks(&cart_data, &info);
-        let ram_banks = Cartridge::create_ram_banks(&info);
-        let save_path = Cartridge::get_save_path(path);
+        let cart_data = Cartridge::cart_load(path);
+        if let Some(unwrapped_data) = cart_data {
+            match Cartridge::get_info(&unwrapped_data) {
+                Ok(info) => {
+                    let rom_banks = Cartridge::create_rom_banks(&unwrapped_data, &info);
+                    let ram_banks = Cartridge::create_ram_banks(&info);
+                    let save_path = Cartridge::get_save_path(path);
 
-        let mut cartridge = Cartridge {
-            info,
-            rom_banks,
-            ram_banks,
-            current_rom_bank: 1,
-            current_ram_bank: 0,
-            ram_enabled: false,
-            rtc_registers: [0; 5],
-            latch_clock: false,
-            save_path,
-        };
+                    let mut cartridge = Cartridge {
+                        info,
+                        data: unwrapped_data,
+                        rom_banks,
+                        ram_banks,
+                        current_rom_bank: 1,
+                        current_ram_bank: 0,
+                        ram_enabled: false,
+                        save_path,
+                    };
 
-        cartridge.load_ram();
-        Ok(cartridge)
+                    cartridge.load_ram();
+                    Ok(cartridge)
+                }
+                Err(err) => Err(err),
+            }
+        } else {
+            Err("Couldn't load ROM file".to_string())
+        }
     }
+
     fn check_header_checksum(card: &[u8]) -> bool {
         let mut checksum: u8 = 0;
         for n in &card[0x0134..0x014d] {
@@ -343,38 +349,43 @@ impl Cartridge {
         };
         Ok(info)
     }
-    fn cart_load(path: &str) -> Result<Vec<u8>, String> {
-        fs::read(path).map_err(|e| format!("Failed to read ROM file: {}", e))
+
+    fn cart_load(path: &str) -> Option<Vec<u8>> {
+        match fs::read(path) {
+            Ok(data) => Some(data),
+            Err(_) => None,
+        }
     }
 
     fn create_rom_banks(data: &[u8], info: &CartridgeInfo) -> Vec<Vec<u8>> {
         let bank_size = 16 * 1024; // 16 KB per bank
         let num_banks = data.len() / bank_size;
-        (0..num_banks)
-            .map(|i| {
-                let start = i * bank_size;
-                let end = start + bank_size;
-                data[start..end].to_vec()
-            })
-            .collect()
+        let mut rom_banks = Vec::with_capacity(num_banks);
+
+        for i in 0..num_banks {
+            let start = i * bank_size;
+            let end = start + bank_size;
+            rom_banks.push(data[start..end].to_vec());
+        }
+
+        rom_banks
     }
+
     fn create_ram_banks(info: &CartridgeInfo) -> Vec<Vec<u8>> {
         let ram_size = match info.cart_type {
-            0x02 | 0x03 => 8,                 // 8 KB
-            0x08 | 0x09 | 0x1A | 0x1B => 32,  // 32 KB for MBC5+RAM+BATTERY
-            0x0C | 0x0D | 0x1C | 0x1D => 128, // 128 KB
-            0x1E => 64,                       // 64 KB
+            0x02 | 0x03 => 8 * 1024,   // 8 KB
+            0x08 | 0x09 => 32 * 1024,  // 32 KB
+            0x0C | 0x0D => 128 * 1024, // 128 KB
             _ => 0,
-        } * 1024;
+        };
 
         if ram_size > 0 {
-            let bank_size = 8 * 1024; // 8 KB per bank
-            let num_banks = ram_size / bank_size;
-            vec![vec![0; bank_size]; num_banks]
+            vec![vec![0; ram_size]]
         } else {
             vec![]
         }
     }
+
     fn get_save_path(rom_path: &str) -> String {
         let path = Path::new(rom_path);
         let file_stem = path.file_stem().unwrap().to_str().unwrap();
@@ -387,30 +398,32 @@ impl Cartridge {
     }
 
     pub fn read(&self, address: usize) -> u8 {
-        match address {
-            0x0000..=0x3FFF => self.rom_banks[0][address],
-            0x4000..=0x7FFF => {
-                let bank_address = address - 0x4000;
-                self.rom_banks[self.current_rom_bank][bank_address]
+        if address < 0x4000 {
+            // Read from bank 0 (always fixed)
+            self.rom_banks[0][address]
+        } else if address < 0x8000 {
+            // Read from the current ROM bank
+            let bank_address = address - 0x4000;
+            self.rom_banks[self.current_rom_bank][bank_address]
+        } else if address >= 0xA000 && address < 0xC000 {
+            // Read from RAM if enabled
+            if self.ram_enabled && !self.ram_banks.is_empty() {
+                let ram_address = address - 0xA000;
+                self.ram_banks[self.current_ram_bank][ram_address]
+            } else {
+                0xFF
             }
-            0xA000..=0xBFFF => {
-                if self.ram_enabled && !self.ram_banks.is_empty() {
-                    let ram_address = address - 0xA000;
-                    self.ram_banks[self.current_ram_bank][ram_address]
-                } else {
-                    0xFF
-                }
-            }
-            _ => 0xFF,
+        } else {
+            0
         }
     }
 
     pub fn write(&mut self, address: usize, value: u8) {
         match address {
             0x0000..=0x1FFF => self.ram_enabled = (value & 0x0F) == 0x0A,
-            0x2000..=0x2FFF => self.set_rom_bank_low(value),
-            0x3000..=0x3FFF => self.set_rom_bank_high(value),
+            0x2000..=0x3FFF => self.set_rom_bank(value),
             0x4000..=0x5FFF => self.set_ram_bank(value),
+            0x6000..=0x7FFF => {} // ROM/RAM mode select (if needed)
             0xA000..=0xBFFF => {
                 if self.ram_enabled && !self.ram_banks.is_empty() {
                     let ram_address = address - 0xA000;
@@ -420,32 +433,21 @@ impl Cartridge {
             _ => {}
         }
     }
+    fn set_rom_bank(&mut self, bank: u8) {
+        let bank = if bank == 0 { 1 } else { bank as usize };
+        self.current_rom_bank = bank % self.rom_banks.len();
+    }
 
-    fn set_rom_bank_low(&mut self, value: u8) {
-        self.current_rom_bank = (self.current_rom_bank & 0x100) | (value as usize);
-        if self.current_rom_bank == 0 {
-            self.current_rom_bank = 1;
+    fn set_ram_bank(&mut self, bank: u8) {
+        if !self.ram_banks.is_empty() {
+            self.current_ram_bank = (bank as usize) % self.ram_banks.len();
         }
-        self.current_rom_bank %= self.rom_banks.len();
-    }
-
-    fn set_rom_bank_high(&mut self, value: u8) {
-        self.current_rom_bank = (self.current_rom_bank & 0xFF) | ((value as usize & 1) << 8);
-        self.current_rom_bank %= self.rom_banks.len();
-    }
-
-    fn set_ram_bank(&mut self, value: u8) {
-        self.current_ram_bank = (value & 0x0F) as usize;
-        self.current_ram_bank %= self.ram_banks.len().max(1);
     }
 
     pub fn save_ram(&self) {
         if self.info.battery && !self.ram_banks.is_empty() {
-            let mut save_data = Vec::new();
-            save_data.extend(self.ram_banks.iter().flatten());
-            save_data.extend_from_slice(&self.rtc_registers);
-
-            if let Err(e) = fs::write(&self.save_path, save_data) {
+            let ram_data: Vec<u8> = self.ram_banks.iter().flatten().cloned().collect();
+            if let Err(e) = fs::write(&self.save_path, ram_data) {
                 eprintln!("Failed to save RAM: {}", e);
             }
         }
@@ -454,15 +456,13 @@ impl Cartridge {
     pub fn load_ram(&mut self) {
         if self.info.battery && !self.ram_banks.is_empty() {
             if let Ok(data) = fs::read(&self.save_path) {
-                let ram_size = self.ram_banks.iter().map(|bank| bank.len()).sum::<usize>();
-                if data.len() >= ram_size + 5 {
-                    let (ram_data, rtc_data) = data.split_at(ram_size);
-                    for (i, bank) in self.ram_banks.iter_mut().enumerate() {
-                        let start = i * bank.len();
-                        let end = start + bank.len();
-                        bank.copy_from_slice(&ram_data[start..end]);
+                let bank_size = self.ram_banks[0].len();
+                for (i, bank) in self.ram_banks.iter_mut().enumerate() {
+                    let start = i * bank_size;
+                    let end = start + bank_size;
+                    if end <= data.len() {
+                        bank.copy_from_slice(&data[start..end]);
                     }
-                    self.rtc_registers.copy_from_slice(&rtc_data[..5]);
                 }
             }
         }

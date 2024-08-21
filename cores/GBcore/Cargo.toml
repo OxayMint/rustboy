@@ -1,16 +1,10 @@
 [package]
-name = "rustboy"
+name = "GBcore"
 version = "0.1.0"
 edition = "2021"
-build = "./src/build.rs"
 
 [dependencies]
 sdl2 = "*"
-miniquad = "0.4.5"
-byteorder = "1.4"
 fps_counter = "3.0.0"
 lazy_static = "1.5.0"
 crossbeam-channel = "0.5.13"
-GBcore = { path = "./cores/GBcore" }
-
-

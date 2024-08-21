@@ -1,4 +1,4 @@
-use crate::libs::gameboy::interrupts::InterruptType;
+use crate::interrupts::InterruptType;
 
 use super::CPU;
 

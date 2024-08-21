@@ -1,19 +1,20 @@
-// use crate::libs::;
-
-#[path = "model/ppu.rs"]
-pub mod ppu_models;
-#[path = "ppu_pipeline.rs"]
-pub mod ppu_pipeline;
-#[path = "ppu_sm.rs"]
-pub mod ppu_sm;
+// pub mod ppu_models;
+// pub mod ppu_pipeline;
+// pub mod ppu_sm;
+mod fetch_state;
+mod oam_entry;
+mod pipeline;
+mod pixel_fifo;
+mod state_machine;
 use std::{
     rc::Rc,
     time::{Duration, Instant},
 };
 
-use super::io::lcd::{Mode, COLORS, LCD};
-use crate::libs::gameboy::interrupts::InterruptType;
-use ppu_models::*;
+use crate::interrupts::InterruptType;
+use crate::io::lcd::{Mode, COLORS, LCD};
+use oam_entry::OamEntry;
+use pixel_fifo::PixelFifo;
 use sdl2::pixels::Color;
 
 pub static LINES_PER_FRAME: u8 = 154;
@@ -51,7 +52,7 @@ impl PPU {
             pf_control: PixelFifo::new(),
             have_update: false,
             last_frame_end: Instant::now(),
-            frame_duration: Duration::from_secs_f64(1.0 / 60.0),
+            frame_duration: Duration::from_secs_f64(1.0 / 120.0),
 
             request_interrupt: None,
         }

@@ -1,26 +1,28 @@
-#[path = "gb/bus.rs"]
-pub mod bus;
-#[path = "gb/cartridge.rs"]
-pub mod cartridge;
-#[path = "gb/cpu.rs"]
-pub mod cpu;
-#[path = "gb/dma.rs"]
-pub mod dma;
-#[path = "gb/input.rs"]
-pub mod input;
-#[path = "gb/instruction.rs"]
-pub mod instruction;
-#[path = "gb/interrupts.rs"]
-pub mod interrupts;
-#[path = "gb/io.rs"]
-pub mod io;
-#[path = "gb/ppu.rs"]
-pub mod ppu;
-#[path = "gb/rendering.rs"]
-pub mod rendering;
-#[path = "gb/timer.rs"]
-pub mod timer;
+mod cpu;
 
+// use crate::;
+// mod GBCore;
+// #[path = "gb/bus.rs"]
+// #[path = "gb/cartridge.rs"]
+// use Car
+// #[path = "gb/cpu.rs"]
+// #[path = "gb/dma.rs"]
+pub mod dma;
+// #[path = "gb/input.rs"]
+pub mod input;
+// #[path = "gb/instruction.rs"]
+pub mod instruction;
+// #[path = "gb/interrupts.rs"]
+pub mod interrupts;
+// #[path = "gb/io.rs"]
+pub mod io;
+// #[path = "gb/ppu.rs"]
+pub mod ppu;
+// #[path = "gb/rendering.rs"]
+pub mod rendering;
+// #[path = "gb/timer.rs"]
+pub mod timer;
+pub mod GBCore {}
 use bus::Bus;
 use cartridge::Cartridge;
 use cpu::CPU;
@@ -36,14 +38,14 @@ use std::sync::{
 use std::thread::{self};
 use std::time::Duration;
 
-pub struct GameBoyEngine {
+pub struct GBCore {
     pub paused: Arc<AtomicBool>,
     pub running: bool,
 }
 
-impl GameBoyEngine {
-    pub fn new() -> GameBoyEngine {
-        GameBoyEngine {
+impl GBCore {
+    pub fn new() -> GBCore {
+        GBCore {
             paused: Arc::new(AtomicBool::new(false)),
             running: true,
         }
@@ -57,8 +59,6 @@ impl GameBoyEngine {
         let cartridge = Cartridge::from_path(path).unwrap();
         println!("{}", cartridge.info.to_string());
         let (input_sender, input_receiver) = bounded(1);
-        let (save_sender, save_receiver) = bounded(1);
-        let (load_sender, load_receiver) = bounded(1);
         let cpu_thread = thread::spawn(move || {
             let mut bus = Bus::new();
             bus.set_cartridge(cartridge);
@@ -77,19 +77,6 @@ impl GameBoyEngine {
                 if !input_receiver.is_empty() {
                     cpu.bus.ioram.borrow_mut().input.last_input = input_receiver.recv().unwrap();
                 }
-                if !save_receiver.is_empty() {
-                    _ = save_receiver.recv().unwrap();
-                    if let Some(cart) = &mut cpu.bus.cart {
-                        cart.save_ram();
-                    }
-                }
-                if !load_receiver.is_empty() {
-                    _ = load_receiver.recv().unwrap();
-                    if let Some(cart) = &mut cpu.bus.cart {
-                        cart.load_ram();
-                    }
-                }
-
                 if step_result < 0 {
                     println!("CPU Error: step_result = {}", step_result);
                     _ = running_sender.send(false);

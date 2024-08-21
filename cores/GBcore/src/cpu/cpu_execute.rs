@@ -279,13 +279,7 @@ impl CPU {
                 // Calculate the new address
                 let new_address = self.regs.pc.wrapping_add(offset as u16);
 
-                // Call goto_addr
                 self.goto_addr(new_address, false);
-
-                // Add extra cycles if the condition is true
-                // if self.check_condition() {
-                //     self.emu_cycles(1); // Add 1 more cycle for a total of 3
-                // }
             }
             InstructionType::RRA => {
                 let old_c = self.flag_c() as u8;

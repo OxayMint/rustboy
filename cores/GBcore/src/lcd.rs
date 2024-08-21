@@ -2,7 +2,7 @@ use std::ops::{BitAnd, BitOr};
 
 use sdl2::pixels::Color;
 
-use crate::libs::gameboy::dma::DMA;
+use crate::dma::DMA;
 
 pub static COLORS: [Color; 4] = [
     //E1F8CF

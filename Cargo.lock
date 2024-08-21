@@ -3,6 +3,16 @@
 version = 3
 
 [[package]]
+name = "GBcore"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "fps_counter",
+ "lazy_static",
+ "sdl2",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -105,6 +115,7 @@ dependencies = [
 name = "rustboy"
 version = "0.1.0"
 dependencies = [
+ "GBcore",
  "byteorder",
  "crossbeam-channel",
  "fps_counter",
