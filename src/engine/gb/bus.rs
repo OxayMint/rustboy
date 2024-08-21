@@ -1,17 +1,6 @@
-use super::{
-    cartridge,
-    input::InputManager,
-    io::{lcd::LCD, IOManager},
-    ppu::PPU,
-    timer::Timer,
-};
+use super::{cartridge, io::IOManager, ppu::PPU, timer::Timer};
 
-use crate::libs::gameboy::interrupts::InterruptType;
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, rc::Rc};
 
 pub struct Bus {
     pub cart: Option<cartridge::Cartridge>,
@@ -57,7 +46,7 @@ impl Bus {
         match address {
             //Char/BG
             0x8000..0xA000 => self.ppu.vram_read(address),
-            //cartriidge ROM or Ext ram
+            //cartridge ROM or Ext ram
             0..0xC000 => {
                 if let Some(cart) = &self.cart {
                     cart.read(address)

@@ -264,11 +264,16 @@ impl PPU {
         {
             let ly = self.lcd.ly as usize;
             if ly as usize >= win_y && ly < win_y + y_res {
-                let window_tile_y = (self.window_line / 8) as usize;
+                let window_tile_y = self.window_line / 8;
                 self.pf_control.bgw_fetch_data[0] = self.vram_read(
                     self.lcd.lcdc_window_tile_map_area()
-                        + ((self.pf_control.fetch_x as usize + 7 - self.lcd.win_x as usize) / 8)
-                        + (window_tile_y as usize * 32),
+                        + (self
+                            .pf_control
+                            .fetch_x
+                            .wrapping_add(7)
+                            .wrapping_sub(self.lcd.win_x))
+                        .wrapping_div(8) as usize
+                        + (window_tile_y * 32) as usize,
                 );
 
                 if self.lcd.lcdc_bg_data_area() == 0x8800 {
