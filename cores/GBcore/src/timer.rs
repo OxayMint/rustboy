@@ -30,7 +30,6 @@ impl Timer {
         self.div = self.div.wrapping_add(1);
         let mut timer_update = false;
 
-        // if self.tac & 0x04 != 0 {
         match self.tac & 0b11 {
             0b00 => timer_update = (prev_div & (1 << 9)) > 0 && ((self.div & (1 << 9)) == 0),
             0b01 => timer_update = (prev_div & (1 << 3)) > 0 && ((self.div & (1 << 3)) == 0),
@@ -38,17 +37,16 @@ impl Timer {
             0b11 => timer_update = (prev_div & (1 << 7)) > 0 && ((self.div & (1 << 7)) == 0),
             _ => println!("this can't be"),
         }
-        // }
 
         if timer_update && ((self.tac & 0x4) > 0) {
-            // exit(0);
-            self.tima = self.tima.wrapping_add(1);
-            if self.tima == 0xFF {
+            let (tima, overflow) = self.tima.overflowing_add(1);
+            if overflow {
                 self.tima = self.tma;
                 if let Some(request_interrupt) = &self.request_interrupt {
                     request_interrupt(InterruptType::TIMER);
                 }
             }
+            self.tima = tima;
         }
     }
 
@@ -67,8 +65,8 @@ impl Timer {
             0xFF04 => self.div = 0,
             0xFF05 => self.tima = value,
             0xFF06 => self.tma = value,
-            // 0xFF07 => self.tac = value & 0x07,
-            0xFF07 => self.tac = value,
+            0xFF07 => self.tac = value & 0x07,
+            // 0xFF07 => self.tac = value,
             _ => panic!("Invalid timer address: {:04X}", address),
         }
     }

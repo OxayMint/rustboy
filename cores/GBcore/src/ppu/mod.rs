@@ -52,7 +52,7 @@ impl PPU {
             pf_control: PixelFifo::new(),
             have_update: false,
             last_frame_end: Instant::now(),
-            frame_duration: Duration::from_secs_f64(1.0 / 120.0),
+            frame_duration: Duration::from_secs_f64(1.0 / 60.0),
 
             request_interrupt: None,
         }

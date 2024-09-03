@@ -12,6 +12,7 @@ fn main() {
     let path = &args[1];
 
     // let path = "/Users/fgoja/dev/rust/rustboy/roms/dmg-acid2.gb";
+    // let path = "/Users/fgoja/dev/rust/rustboy/roms/castlevania.gb";
     // let path = "/Users/fgoja/dev/rust/rustboy/roms/zelda.gb";
     // let path = "/Users/fgoja/dev/rust/rustboy/roms/drmario.gb";
     // let path = "/Users/fgoja/dev/rust/rustboy/roms/tetris.gb";
@@ -22,5 +23,5 @@ fn main() {
     // Initialize the emulator
     let mut emulator = GBCore::new();
     // println!("{}", emulator.gb_engine.memory.cart.info.to_string());
-    emulator.start(path);
+    emulator.start(path.clone());
 }

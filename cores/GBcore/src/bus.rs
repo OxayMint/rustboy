@@ -96,18 +96,16 @@ impl Bus {
                 if let Some(cart) = &mut self.cart {
                     cart.write(address, value)
                 } else {
-                    panic!("Won't work without a cartridge")
+                    println!("Won't work without a cartridge")
                 }
             }
             //Working RAM
             0xC000..0xE000 => self.wram_write(address, value),
             0xE000..0xFE00 => {}
             0xFE00..0xFEA0 => {
-                // let lcd = LCD_INSTANCE.lock().unwrap();
                 if self.ppu.lcd.dma.active {
                     return;
                 }
-                // drop(lcd);
                 self.ppu.oam_write(address, value)
             }
             //unused part

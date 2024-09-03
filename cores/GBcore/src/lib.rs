@@ -41,14 +41,16 @@ impl GBCore {
         }
     }
 
-    pub fn start(&mut self, path: &str) {
+    pub fn start(&mut self, path: String) {
         let paused = Arc::clone(&self.paused);
         let (running_sender, running_receiver) = channel();
         let (buffer_sender, buffer_receiver) = channel();
         // CPU thread
         let cartridge = Cartridge::from_path(path).unwrap();
         println!("{}", cartridge.info.to_string());
+        // exit(0);
         let (input_sender, input_receiver) = bounded(1);
+        let (save_requester, save_maker) = bounded(1);
         let cpu_thread = thread::spawn(move || {
             let mut bus = Bus::new();
             bus.set_cartridge(cartridge);
@@ -67,9 +69,19 @@ impl GBCore {
                 if !input_receiver.is_empty() {
                     cpu.bus.ioram.borrow_mut().input.last_input = input_receiver.recv().unwrap();
                 }
+                if !save_maker.is_empty() {
+                    _ = save_maker.recv();
+                    if let Some(ref cart) = cpu.bus.cart {
+                        cart.save_ram();
+                    }
+                }
                 if step_result < 0 {
                     println!("CPU Error: step_result = {}", step_result);
+                    if let Some(ref cart) = cpu.bus.cart {
+                        cart.save_ram();
+                    }
                     _ = running_sender.send(false);
+
                     break;
                 }
 
@@ -84,13 +96,16 @@ impl GBCore {
         while self.running {
             // calc FPS...
             if let Ok(buffer) = buffer_receiver.recv() {
-                let (input, save, load) = ui.update(buffer);
-                _ = input_sender.send(input.clone());
+                let input = ui.update(buffer);
+                if let Some(input) = input {
+                    _ = input_sender.send(input.clone());
+                }
             }
             let fps = fps.tick();
             println!("FPS: {fps}");
 
             if ui.exited {
+                _ = save_requester.send(true);
                 exit(0);
             }
             if let Some(running) = running_receiver.try_iter().next() {
@@ -100,10 +115,9 @@ impl GBCore {
             }
             thread::yield_now();
         }
+        println!("Finished app");
         // }
         // Wait for CPU thread to finish
         cpu_thread.join().unwrap();
-
-        println!("Finished app");
     }
 }

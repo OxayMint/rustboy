@@ -14,7 +14,7 @@ impl PPU {
     pub fn ly_increment(&mut self) {
         if self.window_is_visible()
             && self.lcd.ly >= self.lcd.win_y
-            && self.lcd.ly < (self.lcd.win_y as u16 + YRES as u16) as u8
+            && self.lcd.ly < self.lcd.win_y.wrapping_add(YRES)
         {
             self.window_line = self.window_line.wrapping_add(1);
         }
@@ -96,7 +96,7 @@ impl PPU {
                 }
 
                 let sleep_time: Duration;
-                let elapsed = self.last_frame_end.elapsed() + Duration::from_millis(1); //add deduction period compensating the real hardware delay
+                let elapsed = self.last_frame_end.elapsed(); //add deduction period compensating the real hardware delay
                 if elapsed < self.frame_duration {
                     sleep_time = self.frame_duration - elapsed;
                     thread::sleep(sleep_time);

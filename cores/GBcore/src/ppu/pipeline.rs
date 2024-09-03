@@ -190,6 +190,7 @@ impl PPU {
             self.pf_control.line_x += 1;
         }
     }
+
     pub fn pipeline_load_sprite_tile(&mut self) {
         for entry in &self.line_entries {
             let obj_x = entry.x as i32 - 8 + self.lcd.scroll_x as i32 % 8;
@@ -242,30 +243,55 @@ impl PPU {
         self.line_entries.sort_by(|a, b| a.x.cmp(&b.x))
     }
 
+    // fn pipeline_load_window_tile(&mut self) {
+    //     if !self.window_is_visible() {
+    //         return;
+    //     }
+    //     // let win_y = self.lcd.win_y as usize;
+    //     // let win_x = self.lcd.win_x as usize;
+    //     // let y_res = YRES as usize;
+    //     // let x_res = XRES as usize;
+
+    //     //TODO maybe switch yres and xres below
+    //     if self.pf_control.fetch_x.wrapping_add(7) >= self.lcd.win_x
+    //         && self.pf_control.fetch_x < self.lcd.win_x.wrapping_add(XRES + 14)
+    //     {
+    //         // let ly = self.lcd.ly as usize;
+    //         if self.lcd.ly >= self.lcd.win_y && self.lcd.ly < self.lcd.win_y.wrapping_add(YRES) {
+    //             let window_tile_y = self.window_line / 8;
+    //             self.pf_control.bgw_fetch_data[0] = self.vram_read(
+    //                 self.lcd.lcdc_window_tile_map_area()
+    //                     + ((self.pf_control.fetch_x as usize + 7 - self.lcd.win_x as usize) / 8)
+    //                     + (window_tile_y * 32) as usize,
+    //             );
+
+    //             if self.lcd.lcdc_bg_data_area() == 0x8800 {
+    //                 self.pf_control.bgw_fetch_data[0] =
+    //                     self.pf_control.bgw_fetch_data[0].wrapping_add(128);
+    //             }
+    //         }
+    //     }
+    // }
+
     fn pipeline_load_window_tile(&mut self) {
         if !self.window_is_visible() {
             return;
         }
-        let win_y = self.lcd.win_y as usize;
-        let win_x = self.lcd.win_x as usize;
-        let y_res = YRES as usize;
-        let x_res = XRES as usize;
+        // let win_y = self.lcd.win_y as usize;
+        // let win_x = self.lcd.win_x as usize;
+        // let y_res = YRES as usize;
+        // let x_res = XRES as usize;
 
         //TODO maybe switch yres and xres below
-        if self.pf_control.fetch_x + 7 >= self.lcd.win_x
-            && self.pf_control.fetch_x + 7 < self.lcd.win_x + XRES + 14
+        if self.pf_control.fetch_x.wrapping_add(7) >= self.lcd.win_x
+            && self.pf_control.fetch_x < self.lcd.win_x.wrapping_add(YRES + 14)
         {
-            let ly = self.lcd.ly as usize;
-            if ly as usize >= win_y && ly < win_y + y_res {
+            // let ly = self.lcd.ly as usize;
+            if self.lcd.ly >= self.lcd.win_y && self.lcd.ly < self.lcd.win_y.wrapping_add(XRES) {
                 let window_tile_y = self.window_line / 8;
                 self.pf_control.bgw_fetch_data[0] = self.vram_read(
                     self.lcd.lcdc_window_tile_map_area()
-                        + (self
-                            .pf_control
-                            .fetch_x
-                            .wrapping_add(7)
-                            .wrapping_sub(self.lcd.win_x))
-                        .wrapping_div(8) as usize
+                        + ((self.pf_control.fetch_x as usize + 7 - self.lcd.win_x as usize) / 8)
                         + (window_tile_y * 32) as usize,
                 );
 

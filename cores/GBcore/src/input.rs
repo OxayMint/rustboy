@@ -3,7 +3,7 @@ use std::sync::Mutex;
 // lazy_static! {
 //     pub static ref INPUT_INSTANCE: Mutex<Input> = Mutex::new(Input::new());
 // }
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Input {
     pub A: bool,
     pub B: bool,
