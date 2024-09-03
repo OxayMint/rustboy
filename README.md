@@ -30,7 +30,7 @@ You can also use the core itself in your own application. I will probably add it
 + Passing memory timing tests
 + Passing acid-dmg2 rendering test.
 + Support for MBC ROMs (Zelda, Pokemon etc.).
-    ...we are here
+...we are here
 - Implement Audio Processing Unit.
 - Add GB Color Mode support.
 - Add custom Input editing support. 
