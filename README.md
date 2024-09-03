@@ -34,8 +34,7 @@ You can also use the core itself in your own application. I will probably add it
 
 ✅ Support for MBC ROMs (Zelda, Pokemon etc.).
 
-We are here
-
+TODO:
 - Implement Audio Processing Unit.
 - Add GB Color Mode support.
 - Add custom Input editing support. 
