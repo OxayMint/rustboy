@@ -32,7 +32,7 @@ pub struct CartridgeInfo {
 }
 
 impl CartridgeInfo {
-    pub fn from_data(path: String, data: &Vec<u8>) -> Result<Self, String> {
+    pub fn from_data(path: &str, data: &Vec<u8>) -> Result<Self, String> {
         match CartridgeInfo::check_header_checksum(data) {
             true => println!("Checksum ok"),
             false => println!("Checksum wrong"),
@@ -320,7 +320,7 @@ impl CartridgeInfo {
         };
         let ram_size = ram_bank_count as usize * 8 * 1024;
         let info = CartridgeInfo {
-            path,
+            path: path.to_string(),
             cart_type: cart_type,
             title: title.to_string(),
             licensee: licensee.to_string(),

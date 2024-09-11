@@ -50,7 +50,7 @@ impl MBC1 {
             ram_enabled: false,
             upper_bits: 0,
             save_path: Self::get_save_path(info),
-            current_save_skips: SAVE_SKIPS,
+            current_save_skips: 0,
         };
         mbc.load_saved_ram();
         return mbc;
@@ -167,7 +167,7 @@ impl MBC for MBC1 {
             }
             // Banking mode select (0x6000 - 0x7FFF)
             0x6000..=0x7FFF => {
-                self.banking_mode = value & 0x01;
+                self.banking_mode = value & 0b1;
             }
             // RAM writing (0xA000 - 0xBFFF)
             0xA000..=0xBFFF => {
@@ -178,8 +178,11 @@ impl MBC for MBC1 {
                             .min(self.ram_bank_count as usize - 1);
                         ram_banks[bank_index][address - 0xA000] = value;
                     }
+                    if !self.battery {
+                        return;
+                    }
                     self.current_save_skips += 1;
-                    if self.current_save_skips == SAVE_SKIPS {
+                    if self.current_save_skips >= SAVE_SKIPS {
                         self.save_ram();
                         self.current_save_skips = 0;
                     }

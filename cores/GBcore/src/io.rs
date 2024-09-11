@@ -1,7 +1,7 @@
 #[path = "lcd.rs"]
 pub mod lcd;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use super::input::{Input, InputManager};
 

@@ -500,8 +500,11 @@ impl CPU {
     fn goto_addr(&mut self, addr: u16, push_pc: bool) {
         if self.check_condition() {
             if push_pc {
-                self.emu_cycles(2);
-                self.bus.stack_push16(&mut self.regs.sp, self.regs.pc);
+                // self.emu_cycles(2);
+                self.bus.stack_push8(&mut self.regs.sp, (self.regs.pc >> 8) as u8);
+                self.emu_cycles(1);
+                self.bus.stack_push8(&mut self.regs.sp, self.regs.pc as u8);
+                self.emu_cycles(1);
             }
             self.regs.pc = addr;
             self.emu_cycles(1);

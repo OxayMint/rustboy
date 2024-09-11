@@ -1,4 +1,7 @@
-use std::fs;
+use std::{
+    any::{Any, TypeId},
+    fs,
+};
 mod cart_info;
 mod mbc;
 use cart_info::CartridgeInfo;
@@ -16,7 +19,7 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn from_path(path: String) -> Result<Cartridge, String> {
+    pub fn from_path(path: &str) -> Result<Cartridge, String> {
         let cart_data = Cartridge::cart_load(&path);
         if let Some(unwrapped_data) = cart_data {
             match CartridgeInfo::from_data(path, &unwrapped_data) {

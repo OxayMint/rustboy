@@ -6,7 +6,7 @@ pub struct MBC0 {
     data: Vec<u8>,
 }
 impl MBC0 {
-    pub fn from_data(data: Vec<u8>, info: &CartridgeInfo) -> Self {
+    pub fn from_data(data: Vec<u8>, _: &CartridgeInfo) -> Self {
         return MBC0 { data: data };
     }
 }
@@ -15,8 +15,8 @@ impl MBC for MBC0 {
         return self.data[address];
     }
 
-    fn write(&mut self, address: usize, value: u8) {
-        self.data[address] = value;
+    fn write(&mut self, _: usize, _: u8) {
+        println!("No writing for non-mbc cards");
     }
     fn save_ram(&self) {}
 }

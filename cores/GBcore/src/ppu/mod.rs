@@ -130,14 +130,10 @@ impl PPU {
     pub fn oam_get_entry_by_index(&self, index: usize) -> &OamEntry {
         return &self.oam_ram[index];
     }
-    // pub fn oam_get_entry_by_address(&self, index: usize) -> &OamEntry {
-    //     return &self.oam_ram[index];
-    // }
     pub fn vram_write(&mut self, address: usize, value: u8) {
         self.vram[address - 0x8000] = value;
     }
     pub fn vram_read(&self, address: usize) -> u8 {
-        // println!("reading vram: {address:04X}");
         self.vram[address - 0x8000]
     }
 

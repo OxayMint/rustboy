@@ -67,6 +67,7 @@ impl MBC for MBCEnum {
 }
 
 pub fn create_mbc(data: Vec<u8>, info: &CartridgeInfo) -> MBCEnum {
+    println!("mbc{}", info.mbc_index);
     let mbc = match info.mbc_index {
         1 => MBCEnum::MBC1(mbc1::MBC1::from_data(data, &info)),
         2 => MBCEnum::MBC2(mbc2::MBC2::from_data(data, &info)),

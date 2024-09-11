@@ -6,9 +6,6 @@ pub mod fetch;
 pub mod interrupts;
 use super::instruction::*;
 use super::Bus;
-// lazy_static::lazy_static! {
-//     pub static ref INT_FLAGS: Mutex<u8> = Mutex::new(0);
-// }
 pub struct CPU {
     pub regs: Registers,
     pub fetched_data: u16,

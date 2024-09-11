@@ -41,14 +41,13 @@ impl GBCore {
         }
     }
 
-    pub fn start(&mut self, path: String) {
+    pub fn start(&mut self, path: &str) {
         let paused = Arc::clone(&self.paused);
         let (running_sender, running_receiver) = channel();
         let (buffer_sender, buffer_receiver) = channel();
         // CPU thread
         let cartridge = Cartridge::from_path(path).unwrap();
         println!("{}", cartridge.info.to_string());
-        // exit(0);
         let (input_sender, input_receiver) = bounded(1);
         let (save_requester, save_maker) = bounded(1);
         let cpu_thread = thread::spawn(move || {
@@ -102,7 +101,7 @@ impl GBCore {
                 }
             }
             let fps = fps.tick();
-            println!("FPS: {fps}");
+            // println!("FPS: {fps}");
 
             if ui.exited {
                 _ = save_requester.send(true);
@@ -116,8 +115,6 @@ impl GBCore {
             thread::yield_now();
         }
         println!("Finished app");
-        // }
-        // Wait for CPU thread to finish
         cpu_thread.join().unwrap();
     }
 }

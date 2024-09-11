@@ -26,7 +26,10 @@ impl CPU {
         }
     }
     fn int_handle(&mut self, addr: u16) {
-        self.bus.stack_push16(&mut self.regs.sp, self.regs.pc);
+        self.bus.stack_push8(&mut self.regs.sp, (self.regs.pc >> 8) as u8);
+        self.emu_cycles(1);
+        self.bus.stack_push8(&mut self.regs.sp, self.regs.pc as u8);
+        self.emu_cycles(1);
         self.regs.pc = addr;
     }
 }

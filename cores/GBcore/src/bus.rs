@@ -91,7 +91,7 @@ impl Bus {
         match address {
             //order matters here since ppu wram addres range is inside the cart range
             0x8000..0xA000 => self.ppu.vram_write(address, value),
-            //cartriidge ROM
+            //Cartridge RAM
             0..0xC000 => {
                 if let Some(cart) = &mut self.cart {
                     cart.write(address, value)
@@ -165,15 +165,15 @@ impl Bus {
         val
     }
 
-    pub fn stack_push16(&mut self, sp: &mut u16, value: u16) {
-        // println!("stack_push16 {}", sp);
-        self.stack_push8(sp, (value >> 8) as u8);
-        self.stack_push8(sp, (value & 0xff) as u8);
-    }
-
-    pub fn stack_pop16(&mut self, sp: &mut u16) -> u16 {
-        self.stack_pop8(sp) as u16 | ((self.stack_pop8(sp) as u16) << 8)
-    }
+    // pub fn stack_push16(&mut self, sp: &mut u16, value: u16) {
+    //     // println!("stack_push16 {}", sp);
+    //     self.stack_push8(sp, (value >> 8) as u8);
+    //     self.stack_push8(sp, (value & 0xff) as u8);
+    // }
+    //
+    // pub fn stack_pop16(&mut self, sp: &mut u16) -> u16 {
+    //     self.stack_pop8(sp) as u16 | ((self.stack_pop8(sp) as u16) << 8)
+    // }
 
     pub fn write_oam(&mut self, address: usize, value: u8) {
         self.ppu.oam_write(address, value)
