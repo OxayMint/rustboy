@@ -22,6 +22,11 @@ impl Renderer {
             // imgbuf: image::ImageBuffer::new<>(160, 144),
         };
         _ = renderer.init();
+
+        println!(
+            "Controls: 
+        D-Pad - Arrows\nA - Z key\nB - X key\nStart - Space\nSelect - V"
+        );
         renderer
     }
 
