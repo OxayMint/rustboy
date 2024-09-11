@@ -27,9 +27,13 @@ You can also use the core itself in your own application. I will probably add it
 
 ### Roadmap
 [Blargg tests](https://github.com/retrio/gb-test-roms) passing: 
+
     ✅ 11/11 on cpu_instrs.gb
+
     ✅ 3/3 on mem_timing.gb
+
     ✅ dmg-acid2.gb
+    
     ➖ dmg_sound.gb
 
 ✅ Support for MBC ROMs (Zelda, Pokemon etc.).
